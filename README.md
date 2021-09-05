@@ -36,6 +36,39 @@ To start a teleport in client (sending) mode, run:
 
 Teleport will only transfer files with their name information. Any file path information will be lost. All the received files will be written out in the CWD where the server side was started.
 
+# Example output
+
+## Server (receiving)
+
+```
+$ target/debug/teleport
+Server mode, listening for connections
+Receiving file 1/4: "testfile" (from 127.0.0.1:52366)
+ =>    2.000G of    2.000G (100.00%) done!
+Receiving file 2/4: "testfile2" (from 127.0.0.1:52368)
+ =>    4.000M of    4.000M (100.00%) done!
+Receiving file 3/4: "testfile3" (from 127.0.0.1:52370)
+ =>    4.000M of    4.000M (100.00%) done!
+Receiving file 4/4: "testfile4" (from 127.0.0.1:52372)
+ =>   20.000M of   20.000M (100.00%) done!
+```
+
+## Client (sending)
+
+```
+$ target/debug/teleport -i ./test/testfile ./test/testfile2 ./test/testfile3 ./test/testfile4
+Client mode
+Sending file 1/4: "testfile"
+ =>    2.000G of    2.000G (100.00%) done!
+Sending file 2/4: "testfile2"
+ =>    4.000M of    4.000M (100.00%) done!
+Sending file 3/4: "testfile3"
+ =>    4.000M of    4.000M (100.00%) done!
+Sending file 4/4: "testfile4"
+ =>   20.000M of   20.000M (100.00%) done!
+
+```
+
 # WIP Disclaimer
 
 Teleport is currently a work in progress. There is no error checking or anything like that (nc doesn't either :P). Use at your own risk.
