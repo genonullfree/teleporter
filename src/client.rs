@@ -1,12 +1,15 @@
+use crate::crypto::{calc_secret, genkey};
 use crate::utils::print_updates;
 use crate::*;
 
 /// Client function sends filename and file data for each filepath
-pub fn client(opt: Opt) -> Result<()> {
+pub fn run(opt: Opt) -> Result<()> {
     // For each filepath in the input vector...
     for (num, item) in opt.input.iter().enumerate() {
         let filepath = item.to_str().unwrap();
         let filename = item.file_name().unwrap();
+
+        let (private, public) = genkey();
 
         // Validate file
         let file = File::open(&filepath).expect("Failed to open file");
@@ -16,6 +19,7 @@ pub fn client(opt: Opt) -> Result<()> {
             totalfiles: opt.input.len() as u64,
             filesize: meta.len(),
             filename: filename.to_str().unwrap().to_string(),
+            pubkey: public,
         };
 
         // Connect to server
@@ -37,21 +41,25 @@ pub fn client(opt: Opt) -> Result<()> {
             .write(&serial.as_bytes())
             .expect("Failed to write to stream");
 
-        let ack = match recv_ack(&stream) {
-            Some(t) => t.ack,
+        let recv = match recv_ack(&stream) {
+            Some(t) => t,
             None => {
-                println!("Error: Timeout waiting for TeleportResponse");
+                println!("Receive TeleportResponse timed out");
                 return Ok(());
             }
         };
 
-        if match ack {
-            TeleportStatus::NoOverwrite | TeleportStatus::NoPermission | TeleportStatus::NoSpace => true,
+        if match recv.ack {
+            TeleportStatus::NoOverwrite
+            | TeleportStatus::NoPermission
+            | TeleportStatus::NoSpace => true,
             _ => false,
-        }{
-            println!("Error: received {:?}", ack);
+        } {
+            println!("Error: received {:?}", recv.ack);
             return Ok(());
         }
+
+        let _secret = calc_secret(&recv.pubkey, &private);
 
         // Send file data
         let _ = send(stream, file, header);

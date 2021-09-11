@@ -10,6 +10,7 @@ use std::thread;
 use structopt::StructOpt;
 
 mod client;
+mod crypto;
 mod server;
 mod utils;
 
@@ -36,7 +37,7 @@ pub struct TeleportInit {
     totalfiles: u64,
     filesize: u64,
     filename: String,
-    //    pubkey: [u8; 32],
+    pubkey: [u8; 32],
     //    overwrite: u8,
     //    chmod: u16,
 }
@@ -44,7 +45,7 @@ pub struct TeleportInit {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TeleportResponse {
     ack: TeleportStatus,
-    //    pubkey: [u8; 32],
+    pubkey: [u8; 32],
 }
 
 /// TeleportStatus type when header is received and ready to receive file data or not
@@ -64,10 +65,10 @@ fn main() {
     // If the input filepath list is empty, assume we're in server mode
     if opt.input.len() == 1 && opt.input[0].to_str().unwrap() == "" {
         println!("Server mode, listening for connections");
-        let _ = server::server(opt);
+        let _ = server::run(opt);
     // Else, we have files to send so we're in client mode
     } else {
         println!("Client mode");
-        let _ = client::client(opt);
+        let _ = client::run(opt);
     }
 }
