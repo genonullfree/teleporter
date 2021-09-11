@@ -1,8 +1,9 @@
+use crate::crypto::{calc_secret, genkey};
 use crate::utils::print_updates;
 use crate::*;
 
 /// Server function sets up a listening socket for any incoming connnections
-pub fn server(opt: Opt) -> Result<()> {
+pub fn run(opt: Opt) -> Result<()> {
     // Bind to all interfaces on specified Port
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port)))
         .expect(&format!("Error binding to port: {:?}", opt.port));
@@ -21,6 +22,8 @@ pub fn server(opt: Opt) -> Result<()> {
 fn recv(mut stream: TcpStream) -> Result<()> {
     let ip = stream.peer_addr().unwrap();
 
+    let (private, public) = genkey();
+
     // Receive header first
     let mut name_buf: [u8; 4096] = [0; 4096];
     let len = stream.read(&mut name_buf)?;
@@ -38,12 +41,14 @@ fn recv(mut stream: TcpStream) -> Result<()> {
     // Send ready for data ACK
     let resp = TeleportResponse {
         ack: TeleportStatus::Proceed,
-        // TODO Add ecdh pubkey
+        pubkey: public,
     };
     let serial_resp = serde_json::to_string(&resp).unwrap();
     stream
         .write(&serial_resp.as_bytes())
         .expect("Failed to write to stream");
+
+    let _secret = calc_secret(&header.pubkey, &private);
 
     // Receive file data
     let mut buf: [u8; 4096] = [0; 4096];
