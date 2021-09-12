@@ -6,6 +6,7 @@ use std::net::Ipv4Addr;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::str;
+use std::thread;
 use structopt::StructOpt;
 
 /// Teleport is a simple application for sending files from Point A to Point B
@@ -150,7 +151,9 @@ fn server(opt: Opt) -> Result<()> {
     // Listen for incoming connections
     for stream in listener.incoming() {
         // Receive connections in recv function
-        recv(stream?)?;
+        thread::spawn(move || {
+            recv(stream.unwrap()).unwrap();
+        });
     }
 
     Ok(())
