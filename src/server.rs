@@ -1,3 +1,4 @@
+use crate::crypto::decrypt;
 use crate::crypto::{calc_secret, genkey};
 use crate::utils::print_updates;
 use crate::*;
@@ -9,7 +10,6 @@ pub fn run(opt: Opt) -> Result<()> {
         .expect(&format!("Error binding to port: {:?}", opt.port));
 
     // Listen for incoming connections
-    // TODO thread off recv call
     for stream in listener.incoming() {
         // Receive connections in recv function
         recv(stream?)?;
@@ -51,27 +51,42 @@ fn recv(mut stream: TcpStream) -> Result<()> {
     let _secret = calc_secret(&header.pubkey, &private);
 
     // Receive file data
-    let mut buf: [u8; 4096] = [0; 4096];
+    let mut buf: [u8; 4124] = [0; 4124];
     let mut received: u64 = 0;
     loop {
         // Read from network connection
-        let len = stream.read(&mut buf).expect("Failed to read");
+        let mut input: Vec<u8>;
+        match stream.read_exact(&mut buf) {
+            Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                if header.filesize - received == 0 {
+                    // A receive of length 0 means the transfer is complete
+                    println!(" done!");
+                    break;
+                }
+                input = buf.to_vec();
+                input.truncate((header.filesize - received + 12 + 16) as usize);
+            }
+            Err(e) => return Err(e),
+            _ => input = buf.to_vec(),
+        };
 
-        // A receive of length 0 means the transfer is complete
-        if len == 0 {
-            println!(" done!");
-            break;
-        }
+        // Decrypt data
+        let decrypted = match decrypt(&secret, input) {
+            Ok(d) => d,
+            Err(s) => {
+                println!("Error in decrypt: {}", s);
+                return Ok(());
+            }
+        };
 
         // Write received data to file
-        let data = &buf[..len];
-        let wrote = file.write(data).expect("Failed to write to file");
-        if len != wrote {
+        let wrote = file.write(&decrypted).expect("Failed to write to file");
+        if decrypted.len() != wrote {
             println!("Error writing to file: {}", &header.filename);
             break;
         }
 
-        received += len as u64;
+        received += decrypted.len() as u64;
         print_updates(received as f64, &header);
     }
 

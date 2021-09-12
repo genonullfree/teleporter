@@ -1,6 +1,8 @@
+use crate::crypto::encrypt;
 use crate::crypto::{calc_secret, genkey};
 use crate::utils::print_updates;
 use crate::*;
+use rand::prelude::*;
 
 /// Client function sends filename and file data for each filepath
 pub fn run(opt: Opt) -> Result<()> {
@@ -84,8 +86,15 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportResponse> {
 }
 
 /// Send function receives the ACK for data and sends the file data
-fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<()> {
+fn send(
+    mut stream: TcpStream,
+    mut file: File,
+    header: TeleportInit,
+    secret: [u8; 32],
+) -> Result<()> {
     let mut buf: [u8; 4096] = [0; 4096];
+    let mut nonce: [u8; 12] = [0; 12];
+    let mut rng = StdRng::from_entropy();
 
     // Send file data
     let mut sent = 0;
@@ -98,13 +107,20 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
             break;
         }
 
-        // Send that data chunk
         let data = &buf[..len];
-        let wrote = stream.write(data).expect("Failed to send data");
-        if len != wrote {
-            println!("Error sending data");
-            break;
-        }
+        rng.fill(&mut nonce);
+
+        let encrypted = match encrypt(&secret, nonce.to_vec(), data.to_vec()) {
+            Ok(e) => e,
+            Err(s) => {
+                println!("{}", s);
+                return Ok(());
+            }
+        };
+
+        // Send that data chunk
+        stream.write_all(&encrypted).expect("Failed to send data");
+        stream.flush().expect("Failed to flush");
 
         sent += len;
         print_updates(sent as f64, &header);
