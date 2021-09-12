@@ -12,7 +12,9 @@ pub fn run(opt: Opt) -> Result<()> {
     // Listen for incoming connections
     for stream in listener.incoming() {
         // Receive connections in recv function
-        recv(stream?)?;
+        thread::spawn(move || {
+            recv(stream.unwrap()).unwrap();
+        });
     }
 
     Ok(())
@@ -48,7 +50,7 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         .write(&serial_resp.as_bytes())
         .expect("Failed to write to stream");
 
-    let _secret = calc_secret(&header.pubkey, &private);
+    let secret = calc_secret(&header.pubkey, &private);
 
     // Receive file data
     let mut buf: [u8; 4124] = [0; 4124];
@@ -62,6 +64,9 @@ fn recv(mut stream: TcpStream) -> Result<()> {
                     // A receive of length 0 means the transfer is complete
                     println!(" done!");
                     break;
+                } else if header.filesize - received > 4096 {
+                    println!("Error: Transfer truncated");
+                    return Ok(());
                 }
                 input = buf.to_vec();
                 input.truncate((header.filesize - received + 12 + 16) as usize);
