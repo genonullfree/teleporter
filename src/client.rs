@@ -61,10 +61,10 @@ pub fn run(opt: Opt) -> Result<()> {
             return Ok(());
         }
 
-        let _secret = calc_secret(&recv.pubkey, &private);
+        let secret = calc_secret(&recv.pubkey, &private);
 
         // Send file data
-        let _ = send(stream, file, header);
+        let _ = send(stream, file, header, secret);
 
         println!(" done!");
     }

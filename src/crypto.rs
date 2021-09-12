@@ -1,3 +1,5 @@
+use aes_gcm::aead::{Aead, NewAead};
+use aes_gcm::{Aes256Gcm, Key};
 use crypto::ed25519::{exchange, keypair};
 use generic_array::GenericArray;
 use rand::prelude::*;
