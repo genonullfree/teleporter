@@ -1,5 +1,6 @@
 use crate::utils::print_updates;
 use crate::*;
+use std::fs;
 
 /// Server function sets up a listening socket for any incoming connnections
 pub fn run(opt: Opt) -> Result<()> {
@@ -35,6 +36,10 @@ fn recv(mut stream: TcpStream) -> Result<()> {
 
     // Open file for writing
     let mut file = File::create(&header.filename).expect("Could not open file");
+    let meta = file.metadata().expect("Could not read file metadata");
+    let mut perms = meta.permissions();
+    perms.set_mode(header.chmod);
+    fs::set_permissions(&header.filename, perms).expect("Could not set file permissions");
 
     // Send ready for data ACK
     let resp = TeleportResponse {

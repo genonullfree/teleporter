@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs::File;
+use std::os::unix::fs::PermissionsExt;
 use std::io::Result;
 use std::io::{self, Read, Write};
 use std::net::Ipv4Addr;
@@ -36,8 +37,8 @@ pub struct TeleportInit {
     totalfiles: u64,
     filesize: u64,
     filename: String,
-    //    overwrite: u8,
-    //    chmod: u16,
+    chmod: u32,
+    //overwrite: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
