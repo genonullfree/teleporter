@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::os::unix::fs::PermissionsExt;
 use std::io::Result;
 use std::io::{self, Read, Write};
 use std::net::Ipv4Addr;
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::str;
 use std::thread;
@@ -29,6 +29,10 @@ pub struct Opt {
     /// Destination teleport Port, or Port to listen on
     #[structopt(short, long, default_value = "9001")]
     port: u16,
+
+    /// Overwrite remote file
+    #[structopt(short, long)]
+    overwrite: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -38,7 +42,7 @@ pub struct TeleportInit {
     filesize: u64,
     filename: String,
     chmod: u32,
-    //overwrite: bool,
+    overwrite: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

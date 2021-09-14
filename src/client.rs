@@ -17,6 +17,7 @@ pub fn run(opt: Opt) -> Result<()> {
             filesize: meta.len(),
             filename: filename.to_str().unwrap().to_string(),
             chmod: meta.permissions().mode(),
+            overwrite: opt.overwrite,
         };
 
         // Connect to server
@@ -79,11 +80,7 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportResponse> {
 }
 
 /// Send function receives the ACK for data and sends the file data
-fn send(
-    mut stream: TcpStream,
-    mut file: File,
-    header: TeleportInit,
-) -> Result<()> {
+fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<()> {
     let mut buf: [u8; 4096] = [0; 4096];
 
     // Send file data
