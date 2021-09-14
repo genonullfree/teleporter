@@ -1,6 +1,7 @@
 use crate::utils::print_updates;
 use crate::*;
 use std::fs;
+use std::path::Path;
 
 /// Server function sets up a listening socket for any incoming connnections
 pub fn run(opt: Opt) -> Result<()> {
@@ -19,9 +20,20 @@ pub fn run(opt: Opt) -> Result<()> {
     Ok(())
 }
 
+fn send_ack(ack: TeleportResponse, mut stream: &TcpStream) -> Result<()> {
+    // Encode and send response
+    let serial_resp = serde_json::to_string(&ack).unwrap();
+    stream
+        .write(&serial_resp.as_bytes())
+        .expect("Failed to write to stream");
+
+    Ok(())
+}
+
 /// Recv receives filenames and file data for a file
 fn recv(mut stream: TcpStream) -> Result<()> {
     let ip = stream.peer_addr().unwrap();
+    let mut file: File;
 
     // Receive header first
     let mut name_buf: [u8; 4096] = [0; 4096];
@@ -34,8 +46,18 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         header.filenum, header.totalfiles, header.filename, ip
     );
 
+    // Test if overwrite is false and file exists
+    if !header.overwrite && Path::new(&header.filename).exists() {
+        println!(" => Refusing to overwrite file: {}", &header.filename);
+        let resp = TeleportResponse {
+            ack: TeleportStatus::NoOverwrite,
+        };
+        send_ack(resp, &stream).expect("Failed to send ack");
+        return Ok(());
+    }
+
     // Open file for writing
-    let mut file = File::create(&header.filename).expect("Could not open file");
+    file = File::create(&header.filename).expect("Could not open file");
     let meta = file.metadata().expect("Could not read file metadata");
     let mut perms = meta.permissions();
     perms.set_mode(header.chmod);
@@ -45,10 +67,7 @@ fn recv(mut stream: TcpStream) -> Result<()> {
     let resp = TeleportResponse {
         ack: TeleportStatus::Proceed,
     };
-    let serial_resp = serde_json::to_string(&resp).unwrap();
-    stream
-        .write(&serial_resp.as_bytes())
-        .expect("Failed to write to stream");
+    send_ack(resp, &stream).expect("Failed to send ack");
 
     // Receive file data
     let mut buf: [u8; 4096] = [0; 4096];
@@ -65,7 +84,10 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         // Write received data to file
         let wrote = file.write(&data).expect("Failed to write to file");
         if len != wrote {
-            println!("Error writing to file: {} (read: {}, wrote: {}", &header.filename, len, wrote);
+            println!(
+                "Error writing to file: {} (read: {}, wrote: {}",
+                &header.filename, len, wrote
+            );
             break;
         }
 
