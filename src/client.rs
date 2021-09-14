@@ -47,15 +47,30 @@ pub fn run(opt: Opt) -> Result<()> {
             }
         };
 
-        if match recv.ack {
-            TeleportStatus::NoOverwrite
-            | TeleportStatus::NoPermission
-            | TeleportStatus::NoSpace => true,
-            _ => false,
-        } {
-            println!("Error: received {:?}", recv.ack);
-            return Ok(());
-        }
+        match recv.ack {
+            TeleportStatus::NoOverwrite => {
+                println!(
+                    "The server refused to overwrite the file: {}",
+                    &header.filename
+                );
+                continue;
+            }
+            TeleportStatus::NoPermission => {
+                println!(
+                    "The server does not have permission to write to this file: {}",
+                    &header.filename
+                );
+                continue;
+            }
+            TeleportStatus::NoSpace => {
+                println!(
+                    "The server has no space available to write the file: {}",
+                    &header.filename
+                );
+                continue;
+            }
+            _ => true,
+        };
 
         // Send file data
         let _ = send(stream, file, header);

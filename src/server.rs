@@ -1,4 +1,3 @@
-use crate::utils::print_updates;
 use crate::*;
 use std::fs;
 use std::path::Path;
@@ -76,7 +75,11 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         // Read from network connection
         let len = stream.read(&mut buf).expect("Failed to read stream");
         if len == 0 {
-            println!(" done!");
+            if received != header.filesize {
+                println!(" => Error receiving: {}", &header.filename);
+            } else {
+                println!(" => Received file: {}", &header.filename);
+            }
             break;
         }
         let data = &buf[..len];
@@ -92,7 +95,6 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         }
 
         received += len as u64;
-        print_updates(received as f64, &header);
     }
 
     Ok(())
