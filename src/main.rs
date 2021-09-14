@@ -10,7 +10,6 @@ use std::thread;
 use structopt::StructOpt;
 
 mod client;
-mod crypto;
 mod server;
 mod utils;
 
@@ -37,7 +36,6 @@ pub struct TeleportInit {
     totalfiles: u64,
     filesize: u64,
     filename: String,
-    pubkey: [u8; 32],
     //    overwrite: u8,
     //    chmod: u16,
 }
@@ -45,7 +43,6 @@ pub struct TeleportInit {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TeleportResponse {
     ack: TeleportStatus,
-    pubkey: [u8; 32],
 }
 
 /// TeleportStatus type when header is received and ready to receive file data or not

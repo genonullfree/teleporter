@@ -1,5 +1,3 @@
-use crate::crypto::decrypt;
-use crate::crypto::{calc_secret, genkey};
 use crate::utils::print_updates;
 use crate::*;
 
@@ -24,8 +22,6 @@ pub fn run(opt: Opt) -> Result<()> {
 fn recv(mut stream: TcpStream) -> Result<()> {
     let ip = stream.peer_addr().unwrap();
 
-    let (private, public) = genkey();
-
     // Receive header first
     let mut name_buf: [u8; 4096] = [0; 4096];
     let len = stream.read(&mut name_buf)?;
@@ -43,55 +39,32 @@ fn recv(mut stream: TcpStream) -> Result<()> {
     // Send ready for data ACK
     let resp = TeleportResponse {
         ack: TeleportStatus::Proceed,
-        pubkey: public,
     };
     let serial_resp = serde_json::to_string(&resp).unwrap();
     stream
         .write(&serial_resp.as_bytes())
         .expect("Failed to write to stream");
 
-    let secret = calc_secret(&header.pubkey, &private);
-
     // Receive file data
-    let mut buf: [u8; 4124] = [0; 4124];
+    let mut buf: [u8; 4096] = [0; 4096];
     let mut received: u64 = 0;
     loop {
         // Read from network connection
-        let mut input: Vec<u8>;
-        match stream.read_exact(&mut buf) {
-            Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                if header.filesize - received == 0 {
-                    // A receive of length 0 means the transfer is complete
-                    println!(" done!");
-                    break;
-                } else if header.filesize - received > 4096 {
-                    println!("Error: Transfer truncated");
-                    return Ok(());
-                }
-                input = buf.to_vec();
-                input.truncate((header.filesize - received + 12 + 16) as usize);
-            }
-            Err(e) => return Err(e),
-            _ => input = buf.to_vec(),
-        };
-
-        // Decrypt data
-        let decrypted = match decrypt(&secret, input) {
-            Ok(d) => d,
-            Err(s) => {
-                println!("Error in decrypt: {}", s);
-                return Ok(());
-            }
-        };
+        let len = stream.read(&mut buf).expect("Failed to read stream");
+        if len == 0 {
+            println!(" done!");
+            break;
+        }
+        let data = &buf[..len];
 
         // Write received data to file
-        let wrote = file.write(&decrypted).expect("Failed to write to file");
-        if decrypted.len() != wrote {
-            println!("Error writing to file: {}", &header.filename);
+        let wrote = file.write(&data).expect("Failed to write to file");
+        if len != wrote {
+            println!("Error writing to file: {} (read: {}, wrote: {}", &header.filename, len, wrote);
             break;
         }
 
-        received += decrypted.len() as u64;
+        received += len as u64;
         print_updates(received as f64, &header);
     }
 
