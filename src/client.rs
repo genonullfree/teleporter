@@ -1,8 +1,5 @@
-use crate::crypto::encrypt;
-use crate::crypto::{calc_secret, genkey};
 use crate::utils::print_updates;
 use crate::*;
-use rand::prelude::*;
 
 /// Client function sends filename and file data for each filepath
 pub fn run(opt: Opt) -> Result<()> {
@@ -10,8 +7,6 @@ pub fn run(opt: Opt) -> Result<()> {
     for (num, item) in opt.input.iter().enumerate() {
         let filepath = item.to_str().unwrap();
         let filename = item.file_name().unwrap();
-
-        let (private, public) = genkey();
 
         // Validate file
         let file = File::open(&filepath).expect("Failed to open file");
@@ -21,7 +16,6 @@ pub fn run(opt: Opt) -> Result<()> {
             totalfiles: opt.input.len() as u64,
             filesize: meta.len(),
             filename: filename.to_str().unwrap().to_string(),
-            pubkey: public,
         };
 
         // Connect to server
@@ -61,10 +55,8 @@ pub fn run(opt: Opt) -> Result<()> {
             return Ok(());
         }
 
-        let secret = calc_secret(&recv.pubkey, &private);
-
         // Send file data
-        let _ = send(stream, file, header, secret);
+        let _ = send(stream, file, header);
 
         println!(" done!");
     }
@@ -90,11 +82,8 @@ fn send(
     mut stream: TcpStream,
     mut file: File,
     header: TeleportInit,
-    secret: [u8; 32],
 ) -> Result<()> {
     let mut buf: [u8; 4096] = [0; 4096];
-    let mut nonce: [u8; 12] = [0; 12];
-    let mut rng = StdRng::from_entropy();
 
     // Send file data
     let mut sent = 0;
@@ -108,18 +97,9 @@ fn send(
         }
 
         let data = &buf[..len];
-        rng.fill(&mut nonce);
-
-        let encrypted = match encrypt(&secret, nonce.to_vec(), data.to_vec()) {
-            Ok(e) => e,
-            Err(s) => {
-                println!("{}", s);
-                return Ok(());
-            }
-        };
 
         // Send that data chunk
-        stream.write_all(&encrypted).expect("Failed to send data");
+        stream.write_all(&data).expect("Failed to send data");
         stream.flush().expect("Failed to flush");
 
         sent += len;
