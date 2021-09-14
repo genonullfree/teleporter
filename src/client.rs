@@ -16,6 +16,7 @@ pub fn run(opt: Opt) -> Result<()> {
             totalfiles: opt.input.len() as u64,
             filesize: meta.len(),
             filename: filename.to_str().unwrap().to_string(),
+            chmod: meta.permissions().mode(),
         };
 
         // Connect to server
