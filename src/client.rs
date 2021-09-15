@@ -3,14 +3,23 @@ use crate::*;
 
 /// Client function sends filename and file data for each filepath
 pub fn run(opt: Opt) -> Result<()> {
+    println!("Teleport Client");
+
     // For each filepath in the input vector...
     for (num, item) in opt.input.iter().enumerate() {
         let filepath = item.to_str().unwrap();
         let filename = item.file_name().unwrap();
 
+
         // Validate file
-        let file = File::open(&filepath).expect("Failed to open file");
-        let meta = file.metadata().expect("Failed to read metadata");
+        let file = match File::open(&filepath) {
+            Ok(f) => f,
+            Err(s) => return Err(s),
+        };
+        let meta = match file.metadata() {
+            Ok(m) => m,
+            Err(s) => return Err(s),
+        };
         let header = TeleportInit {
             filenum: (num + 1) as u64,
             totalfiles: opt.input.len() as u64,

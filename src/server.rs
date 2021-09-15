@@ -6,7 +6,9 @@ use std::path::Path;
 pub fn run(opt: Opt) -> Result<()> {
     // Bind to all interfaces on specified Port
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port)))
-        .expect(&format!("Error binding to port: {:?}", opt.port));
+        .expect(&format!("Error binding to port: {:?}", &opt.port));
+
+    println!("Teleport Server listening for connections on 0.0.0.0:{}", &opt.port);
 
     // Listen for incoming connections
     for stream in listener.incoming() {
