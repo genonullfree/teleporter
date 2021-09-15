@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Result;
 use std::io::{self, Read, Write};
+use std::io::{Error, ErrorKind};
 use std::net::Ipv4Addr;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt;
@@ -75,8 +76,8 @@ fn main() {
     match out {
         Ok(()) => return,
         Err(s) => {
-                println!("Error: {}", s);
-                return;
-            },
+            println!("Error: {}", s);
+            return;
+        }
     };
 }

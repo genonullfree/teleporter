@@ -8,7 +8,10 @@ pub fn run(opt: Opt) -> Result<()> {
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port)))
         .expect(&format!("Error binding to port: {:?}", &opt.port));
 
-    println!("Teleport Server listening for connections on 0.0.0.0:{}", &opt.port);
+    println!(
+        "Teleport Server listening for connections on 0.0.0.0:{}",
+        &opt.port
+    );
 
     // Listen for incoming connections
     for stream in listener.incoming() {
