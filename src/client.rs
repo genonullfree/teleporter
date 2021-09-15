@@ -10,11 +10,13 @@ pub fn run(opt: Opt) -> Result<()> {
         let filepath = item.to_str().unwrap();
         let filename = item.file_name().unwrap();
 
-
         // Validate file
         let file = match File::open(&filepath) {
             Ok(f) => f,
-            Err(s) => return Err(s),
+            Err(s) => {
+                println!("Error opening file: {}", filepath);
+                return Err(s);
+            }
         };
         let meta = match file.metadata() {
             Ok(m) => m,
@@ -31,11 +33,21 @@ pub fn run(opt: Opt) -> Result<()> {
 
         // Connect to server
         let addr = format!("{}:{}", opt.dest, opt.port);
-        let mut stream = TcpStream::connect(
-            addr.parse::<SocketAddr>()
-                .expect(&format!("Error with dest: {}", addr)),
-        )
-        .expect(&format!("Error connecting to: {:?}", opt.dest));
+        let mut stream = match TcpStream::connect(match addr.parse::<SocketAddr>() {
+            Ok(a) => a,
+            Err(_) => {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    "Error with destination address",
+                ))
+            }
+        }) {
+            Ok(s) => s,
+            Err(s) => {
+                println!("Error connecting to: {}:{}", opt.dest, opt.port);
+                return Err(s);
+            }
+        };
 
         println!(
             "Sending file {}/{}: {:?}",
@@ -44,10 +56,12 @@ pub fn run(opt: Opt) -> Result<()> {
 
         // Send header first
         let serial = serde_json::to_string(&header).unwrap();
-        stream
-            .write(&serial.as_bytes())
-            .expect("Failed to write to stream");
+        match stream.write(&serial.as_bytes()) {
+            Ok(_) => true,
+            Err(s) => return Err(s),
+        };
 
+        // Receive response from server
         let recv = match recv_ack(&stream) {
             Some(t) => t,
             None => {
@@ -56,7 +70,11 @@ pub fn run(opt: Opt) -> Result<()> {
             }
         };
 
+        // Validate response
         match recv.ack {
+            TeleportStatus::Overwrite => {
+                println!("The server is overwriting the file: {}", &header.filename)
+            }
             TeleportStatus::NoOverwrite => {
                 println!(
                     "The server refused to overwrite the file: {}",
@@ -78,11 +96,14 @@ pub fn run(opt: Opt) -> Result<()> {
                 );
                 continue;
             }
-            _ => true,
+            _ => (),
         };
 
         // Send file data
-        let _ = send(stream, file, header);
+        match send(stream, file, header) {
+            Ok(_) => true,
+            Err(s) => return Err(s),
+        };
 
         println!(" done!");
     }
@@ -93,12 +114,16 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportResponse> {
     let mut buf: [u8; 4096] = [0; 4096];
 
     // Receive ACK that the server is ready for data
-    let len = stream
-        .read(&mut buf)
-        .expect("Failed to receive TeleportResponse");
+    let len = match stream.read(&mut buf) {
+        Ok(l) => l,
+        Err(_) => return None,
+    };
+    //.expect("Failed to receive TeleportResponse");
     let fix = &buf[..len];
-    let resp: TeleportResponse =
-        serde_json::from_str(str::from_utf8(&fix).unwrap()).expect("Cannot parse TeleportResponse");
+    let resp: TeleportResponse = match serde_json::from_str(str::from_utf8(&fix).unwrap()) {
+        Ok(s) => s,
+        Err(_) => return None,
+    };
 
     Some(resp)
 }
@@ -111,7 +136,10 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
     let mut sent = 0;
     loop {
         // Read a chunk of the file
-        let len = file.read(&mut buf).expect("Failed to read file");
+        let len = match file.read(&mut buf) {
+            Ok(l) => l,
+            Err(s) => return Err(s),
+        };
 
         // If a length of 0 was read, we're done sending
         if len == 0 {
@@ -121,8 +149,14 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
         let data = &buf[..len];
 
         // Send that data chunk
-        stream.write_all(&data).expect("Failed to send data");
-        stream.flush().expect("Failed to flush");
+        match stream.write_all(&data) {
+            Ok(_) => true,
+            Err(s) => return Err(s),
+        };
+        match stream.flush() {
+            Ok(_) => true,
+            Err(s) => return Err(s),
+        };
 
         sent += len;
         print_updates(sent as f64, &header);
