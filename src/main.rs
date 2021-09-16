@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::Result;
 use std::io::{self, Read, Write};
+use std::io::{Error, ErrorKind};
 use std::net::Ipv4Addr;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt;
@@ -63,14 +64,20 @@ pub enum TeleportStatus {
 fn main() {
     // Process arguments
     let opt = Opt::from_args();
+    let out: Result<()>;
 
     // If the input filepath list is empty, assume we're in server mode
     if opt.input.len() == 1 && opt.input[0].to_str().unwrap() == "" {
-        println!("Server mode, listening for connections");
-        let _ = server::run(opt);
+        out = server::run(opt);
     // Else, we have files to send so we're in client mode
     } else {
-        println!("Client mode");
-        let _ = client::run(opt);
+        out = client::run(opt);
     }
+    match out {
+        Ok(()) => return,
+        Err(s) => {
+            println!("Error: {}", s);
+            return;
+        }
+    };
 }
