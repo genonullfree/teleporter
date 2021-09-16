@@ -5,8 +5,13 @@ use std::path::Path;
 /// Server function sets up a listening socket for any incoming connnections
 pub fn run(opt: Opt) -> Result<()> {
     // Bind to all interfaces on specified Port
-    let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port)))
-        .expect(&format!("Error binding to port: {:?}", &opt.port));
+    let listener = match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
+        Ok(l) => l,
+        Err(s) => {
+            println!("Error binding to port: {:?}", &opt.port);
+            return Err(s);
+        }
+    };
 
     println!(
         "Teleport Server listening for connections on 0.0.0.0:{}",
@@ -15,9 +20,13 @@ pub fn run(opt: Opt) -> Result<()> {
 
     // Listen for incoming connections
     for stream in listener.incoming() {
+        let s = match stream {
+            Ok(s) => s,
+            _ => continue,
+        };
         // Receive connections in recv function
         thread::spawn(move || {
-            recv(stream.unwrap()).unwrap();
+            recv(s).unwrap();
         });
     }
 
@@ -27,9 +36,10 @@ pub fn run(opt: Opt) -> Result<()> {
 fn send_ack(ack: TeleportResponse, mut stream: &TcpStream) -> Result<()> {
     // Encode and send response
     let serial_resp = serde_json::to_string(&ack).unwrap();
-    stream
-        .write(&serial_resp.as_bytes())
-        .expect("Failed to write to stream");
+    match stream.write(&serial_resp.as_bytes()) {
+        Ok(_) => true,
+        Err(s) => return Err(s),
+    };
 
     Ok(())
 }
@@ -43,8 +53,16 @@ fn recv(mut stream: TcpStream) -> Result<()> {
     let mut name_buf: [u8; 4096] = [0; 4096];
     let len = stream.read(&mut name_buf)?;
     let fix = &name_buf[..len];
-    let header: TeleportInit =
-        serde_json::from_str(str::from_utf8(&fix).unwrap()).expect("Cannot understand filename");
+    let header: TeleportInit = match serde_json::from_str(str::from_utf8(&fix).unwrap()) {
+        Ok(s) => s,
+        Err(_) => {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Data received did not match expected",
+            ))
+        }
+    };
+
     println!(
         "Receiving file {}/{}: {:?} (from {})",
         header.filenum, header.totalfiles, header.filename, ip
@@ -56,29 +74,50 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         let resp = TeleportResponse {
             ack: TeleportStatus::NoOverwrite,
         };
-        send_ack(resp, &stream).expect("Failed to send ack");
-        return Ok(());
+        return send_ack(resp, &stream);
     }
 
     // Open file for writing
-    file = File::create(&header.filename).expect("Could not open file");
-    let meta = file.metadata().expect("Could not read file metadata");
+    file = match File::create(&header.filename) {
+        Ok(f) => f,
+        Err(s) => {
+            println!("Error: unable to create file: {}", &header.filename);
+            return Err(s);
+        }
+    };
+    let meta = match file.metadata() {
+        Ok(m) => m,
+        Err(s) => return Err(s),
+    };
     let mut perms = meta.permissions();
     perms.set_mode(header.chmod);
-    fs::set_permissions(&header.filename, perms).expect("Could not set file permissions");
+    match fs::set_permissions(&header.filename, perms) {
+        Ok(_) => true,
+        Err(s) => {
+            println!("Could not set file permissions");
+            return Err(s);
+        }
+    };
 
     // Send ready for data ACK
     let resp = TeleportResponse {
         ack: TeleportStatus::Proceed,
     };
-    send_ack(resp, &stream).expect("Failed to send ack");
+    match send_ack(resp, &stream) {
+        Ok(_) => true,
+        Err(s) => return Err(s),
+    };
 
     // Receive file data
     let mut buf: [u8; 4096] = [0; 4096];
     let mut received: u64 = 0;
     loop {
         // Read from network connection
-        let len = stream.read(&mut buf).expect("Failed to read stream");
+        let len = match stream.read(&mut buf) {
+            Ok(l) => l,
+            Err(s) => return Err(s),
+        };
+
         if len == 0 {
             if received != header.filesize {
                 println!(" => Error receiving: {}", &header.filename);
@@ -90,7 +129,11 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         let data = &buf[..len];
 
         // Write received data to file
-        let wrote = file.write(&data).expect("Failed to write to file");
+        let wrote = match file.write(&data) {
+            Ok(w) => w,
+            Err(s) => return Err(s),
+        };
+
         if len != wrote {
             println!(
                 "Error writing to file: {} (read: {}, wrote: {}",
