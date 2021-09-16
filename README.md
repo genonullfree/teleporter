@@ -6,16 +6,20 @@ Teleport lets you pass the destination and a list of files you wish to send and 
 
 # Usage
 ```
+teleport 0.2.0
+Teleport is a simple application for sending files from Point A to Point B
+
 USAGE:
-    teleport [OPTIONS]
+    teleport [FLAGS] [OPTIONS]
 
 FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+    -h, --help         Prints help information
+    -o, --overwrite    Overwrite remote file
+    -V, --version      Prints version information
 
 OPTIONS:
     -d, --dest <dest>         Destination teleport IP address [default: 127.0.0.1]
-    -i, --input <input>...    List of filepaths to files that will be teleported [default: ""]
+    -i, --input <input>...    List of filepaths to files that will be teleported [default: ]
     -p, --port <port>         Destination teleport Port, or Port to listen on [default: 9001]
 ```
 
@@ -34,30 +38,29 @@ To start a teleport in client (sending) mode, run:
 ./teleport -d <destination IP> -i <file> [[file2] [file3] ...]
 ```
 
-Teleport will only transfer files with their name information. Any file path information will be lost. All the received files will be written out in the CWD where the server side was started.
+Teleport will transfer files with their name information as well as their file permissions. Any file path information will be lost. All the received files will be written out in the CWD where the server side was started.
 
 # Example output
 
-## Server (receiving)
+## Server (receiving from 2 different clients)
 
 ```
 $ target/debug/teleport
-Server mode, listening for connections
-Receiving file 1/4: "testfile" (from 127.0.0.1:52366)
- =>    2.000G of    2.000G (100.00%) done!
-Receiving file 2/4: "testfile2" (from 127.0.0.1:52368)
- =>    4.000M of    4.000M (100.00%) done!
-Receiving file 3/4: "testfile3" (from 127.0.0.1:52370)
- =>    4.000M of    4.000M (100.00%) done!
-Receiving file 4/4: "testfile4" (from 127.0.0.1:52372)
- =>   20.000M of   20.000M (100.00%) done!
+Teleport Server listening for connections on 0.0.0.0:9001
+Receiving: ["testfile", "otherfile", "testfile2", "testfile3"] => Received file: testfile2 from: 127.0.0.1:41330
+Receiving: ["testfile", "otherfile", "testfile3", "testfile4"] => Received file: testfile3 from: 127.0.0.1:41332
+Receiving: ["testfile", "otherfile", "testfile4"] => Received file: testfile from: 127.0.0.1:41326
+Receiving: ["otherfile", "testfile4", "testfile5"] => Received file: testfile5 from: 127.0.0.1:41336
+Receiving: ["otherfile", "testfile4", "testfileB"] => Received file: testfile4 from: 127.0.0.1:41334
+Receiving: ["otherfile", "testfileB"] => Received file: testfileB from: 127.0.0.1:41340
+Receiving: ["otherfile", "testfileC"]
 ```
 
 ## Client (sending)
 
 ```
 $ target/debug/teleport -i ./test/testfile ./test/testfile2 ./test/testfile3 ./test/testfile4
-Client mode
+Teleport Client
 Sending file 1/4: "testfile"
  =>    2.000G of    2.000G (100.00%) done!
 Sending file 2/4: "testfile2"
@@ -71,4 +74,4 @@ Sending file 4/4: "testfile4"
 
 # WIP Disclaimer
 
-Teleport is currently a work in progress. There is no error checking or anything like that (nc doesn't either :P). Use at your own risk.
+Teleport is currently a work in progress. Use at your own risk.

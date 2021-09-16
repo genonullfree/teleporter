@@ -49,7 +49,7 @@ fn send_ack(ack: TeleportResponse, mut stream: &TcpStream) -> Result<()> {
 }
 
 fn print_list(list: &MutexGuard<Vec<String>>) {
-    print!("Receiving: {:?}\r", list);
+    print!("\rReceiving: {:?}", list);
     io::stdout().flush().unwrap();
 }
 
@@ -131,7 +131,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()>
             if received != header.filesize {
                 println!(" => Error receiving: {}", &header.filename);
             } else {
-                println!("\n => Received file: {} from: {:?}", &header.filename, ip);
+                println!(" => Received file: {} from: {:?}", &header.filename, ip);
                 let mut recv_data = recv_list.lock().unwrap();
                 recv_data.retain(|x| x != &header.filename);
                 print_list(&recv_data);
