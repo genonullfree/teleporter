@@ -1,6 +1,7 @@
 use crate::*;
 use std::fs;
 use std::path::Path;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Server function sets up a listening socket for any incoming connnections
 pub fn run(opt: Opt) -> Result<()> {
@@ -18,6 +19,8 @@ pub fn run(opt: Opt) -> Result<()> {
         &opt.port
     );
 
+    let recv_list = Arc::new(Mutex::new(Vec::<String>::new()));
+
     // Listen for incoming connections
     for stream in listener.incoming() {
         let s = match stream {
@@ -25,8 +28,9 @@ pub fn run(opt: Opt) -> Result<()> {
             _ => continue,
         };
         // Receive connections in recv function
+        let recv_list_clone = Arc::clone(&recv_list);
         thread::spawn(move || {
-            recv(s).unwrap();
+            recv(s, recv_list_clone).unwrap();
         });
     }
 
@@ -44,8 +48,13 @@ fn send_ack(ack: TeleportResponse, mut stream: &TcpStream) -> Result<()> {
     Ok(())
 }
 
+fn print_list(list: &MutexGuard<Vec<String>>) {
+    print!("Receiving: {:?}\r", list);
+    io::stdout().flush().unwrap();
+}
+
 /// Recv receives filenames and file data for a file
-fn recv(mut stream: TcpStream) -> Result<()> {
+fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()> {
     let ip = stream.peer_addr().unwrap();
     let mut file: File;
 
@@ -63,10 +72,10 @@ fn recv(mut stream: TcpStream) -> Result<()> {
         }
     };
 
-    println!(
-        "Receiving file {}/{}: {:?} (from {})",
-        header.filenum, header.totalfiles, header.filename, ip
-    );
+    let mut recv_data = recv_list.lock().unwrap();
+    recv_data.push(header.filename.clone());
+    print_list(&recv_data);
+    drop(recv_data);
 
     // Test if overwrite is false and file exists
     if !header.overwrite && Path::new(&header.filename).exists() {
@@ -122,7 +131,11 @@ fn recv(mut stream: TcpStream) -> Result<()> {
             if received != header.filesize {
                 println!(" => Error receiving: {}", &header.filename);
             } else {
-                println!(" => Received file: {}", &header.filename);
+                println!("\n => Received file: {} from: {:?}", &header.filename, ip);
+                let mut recv_data = recv_list.lock().unwrap();
+                recv_data.retain(|x| x != &header.filename);
+                print_list(&recv_data);
+                drop(recv_data);
             }
             break;
         }
