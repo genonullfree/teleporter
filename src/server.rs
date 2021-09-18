@@ -128,14 +128,14 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()>
         };
 
         if len == 0 {
-            if received != header.filesize {
-                println!(" => Error receiving: {}", &header.filename);
-            } else {
+            if received == header.filesize {
                 println!(" => Received file: {} from: {:?}", &header.filename, ip);
                 let mut recv_data = recv_list.lock().unwrap();
                 recv_data.retain(|x| x != &header.filename);
                 print_list(&recv_data);
                 drop(recv_data);
+            } else {
+                println!(" => Error receiving: {}", &header.filename);
             }
             break;
         }
