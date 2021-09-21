@@ -1,12 +1,11 @@
-use serde::{Deserialize, Serialize};
 use std::fs::File;
-use std::io::Result;
 use std::io::{self, Read, Write};
 use std::io::{Error, ErrorKind};
 use std::net::Ipv4Addr;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::result::Result;
 use std::str;
 use std::thread;
 use structopt::StructOpt;
@@ -39,7 +38,7 @@ pub struct Opt {
 const PROTOCOL: &str = "TELEPORT";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct TeleportInit {
     protocol: String,
     version: String,
@@ -51,13 +50,13 @@ pub struct TeleportInit {
     overwrite: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct TeleportResponse {
     ack: TeleportStatus,
 }
 
 /// TeleportStatus type when header is received and ready to receive file data or not
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TeleportStatus {
     Proceed,      // Success
     Overwrite,    // Success
@@ -70,7 +69,7 @@ pub enum TeleportStatus {
 fn main() {
     // Process arguments
     let opt = Opt::from_args();
-    let out: Result<()>;
+    let out;
 
     // If the input filepath list is empty, assume we're in server mode
     if opt.input.len() == 1 && opt.input[0].to_str().unwrap() == "" {
