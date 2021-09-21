@@ -3,7 +3,7 @@ use crate::*;
 
 /// Client function sends filename and file data for each filepath
 pub fn run(opt: Opt) -> Result<()> {
-    println!("Teleport Client");
+    println!("Teleport Client {}", VERSION);
 
     // For each filepath in the input vector...
     for (num, item) in opt.input.iter().enumerate() {
@@ -23,6 +23,8 @@ pub fn run(opt: Opt) -> Result<()> {
             Err(s) => return Err(s),
         };
         let header = TeleportInit {
+            protocol: PROTOCOL.to_string(),
+            version: VERSION.to_string(),
             filenum: (num + 1) as u64,
             totalfiles: opt.input.len() as u64,
             filesize: meta.len(),
@@ -95,6 +97,10 @@ pub fn run(opt: Opt) -> Result<()> {
                     &header.filename
                 );
                 continue;
+            }
+            TeleportStatus::WrongVersion => {
+                println!("Error: The server does not speak {} {}", PROTOCOL, VERSION);
+                break;
             }
             _ => (),
         };

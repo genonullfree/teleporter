@@ -36,8 +36,13 @@ pub struct Opt {
     overwrite: bool,
 }
 
+const PROTOCOL: &str = "TELEPORT";
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TeleportInit {
+    protocol: String,
+    version: String,
     filenum: u64,
     totalfiles: u64,
     filesize: u64,
@@ -59,6 +64,7 @@ pub enum TeleportStatus {
     NoOverwrite,  // Error
     NoSpace,      // Error
     NoPermission, // Error
+    WrongVersion, // Error
 }
 
 fn main() {
