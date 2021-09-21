@@ -15,8 +15,8 @@ pub fn run(opt: Opt) -> Result<()> {
     };
 
     println!(
-        "Teleport Server listening for connections on 0.0.0.0:{}",
-        &opt.port
+        "Teleport Server {} listening for connections on 0.0.0.0:{}",
+        VERSION, &opt.port
     );
 
     let recv_list = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -71,6 +71,14 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()>
             ))
         }
     };
+
+    if header.protocol != PROTOCOL.to_string() || header.version != VERSION.to_string() {
+        println!("Error: Client is not speaking {} {}", PROTOCOL, VERSION);
+        let resp = TeleportResponse {
+            ack: TeleportStatus::WrongVersion,
+        };
+        return send_ack(resp, &stream);
+    }
 
     let mut recv_data = recv_list.lock().unwrap();
     recv_data.push(header.filename.clone());
