@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Server function sets up a listening socket for any incoming connnections
-pub fn run(opt: Opt) -> Result<()> {
+pub fn run(opt: Opt) -> Result<(), Error> {
     // Bind to all interfaces on specified Port
     let listener = match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
         Ok(l) => l,
@@ -37,10 +37,10 @@ pub fn run(opt: Opt) -> Result<()> {
     Ok(())
 }
 
-fn send_ack(ack: TeleportResponse, mut stream: &TcpStream) -> Result<()> {
+fn send_ack(ack: TeleportResponse, mut stream: &TcpStream) -> Result<(), Error> {
     // Encode and send response
-    let serial_resp = serde_json::to_string(&ack).unwrap();
-    match stream.write(&serial_resp.as_bytes()) {
+    let serial_resp = ack.serialize();
+    match stream.write(&serial_resp) {
         Ok(_) => true,
         Err(s) => return Err(s),
     };
@@ -54,7 +54,7 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
 }
 
 /// Recv receives filenames and file data for a file
-fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()> {
+fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(), Error> {
     let ip = stream.peer_addr().unwrap();
     let mut file: File;
 
@@ -62,8 +62,9 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()>
     let mut name_buf: [u8; 4096] = [0; 4096];
     let len = stream.read(&mut name_buf)?;
     let fix = &name_buf[..len];
-    let header: TeleportInit = match serde_json::from_str(str::from_utf8(&fix).unwrap()) {
-        Ok(s) => s,
+    let mut header = TeleportInit::new();
+    match header.deserialize(fix.to_vec()) {
+        Ok(_) => true,
         Err(_) => {
             return Err(Error::new(
                 ErrorKind::InvalidData,
@@ -88,18 +89,17 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()>
     // Test if overwrite is false and file exists
     if !header.overwrite && Path::new(&header.filename).exists() {
         println!(" => Refusing to overwrite file: {}", &header.filename);
-        let resp = TeleportResponse {
-            ack: TeleportStatus::NoOverwrite,
-        };
+        let resp = TeleportResponse::new(TeleportStatus::NoOverwrite);
         return send_ack(resp, &stream);
     }
 
     // Open file for writing
     file = match File::create(&header.filename) {
         Ok(f) => f,
-        Err(s) => {
+        Err(_) => {
             println!("Error: unable to create file: {}", &header.filename);
-            return Err(s);
+            let resp = TeleportResponse::new(TeleportStatus::NoPermission);
+            return send_ack(resp, &stream);
         }
     };
     let meta = match file.metadata() {
@@ -110,16 +110,15 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()>
     perms.set_mode(header.chmod);
     match fs::set_permissions(&header.filename, perms) {
         Ok(_) => true,
-        Err(s) => {
+        Err(_) => {
             println!("Could not set file permissions");
-            return Err(s);
+            let resp = TeleportResponse::new(TeleportStatus::NoPermission);
+            return send_ack(resp, &stream);
         }
     };
 
     // Send ready for data ACK
-    let resp = TeleportResponse {
-        ack: TeleportStatus::Proceed,
-    };
+    let resp = TeleportResponse::new(TeleportStatus::Proceed);
     match send_ack(resp, &stream) {
         Ok(_) => true,
         Err(s) => return Err(s),
@@ -157,7 +156,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<()>
 
         if len != wrote {
             println!(
-                "Error writing to file: {} (read: {}, wrote: {}",
+                "Error writing to file: {} (read: {}, wrote: {}). Out of space?",
                 &header.filename, len, wrote
             );
             break;

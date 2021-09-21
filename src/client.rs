@@ -2,7 +2,7 @@ use crate::utils::print_updates;
 use crate::*;
 
 /// Client function sends filename and file data for each filepath
-pub fn run(opt: Opt) -> Result<()> {
+pub fn run(opt: Opt) -> Result<(), Error> {
     println!("Teleport Client {}", VERSION);
 
     // For each filepath in the input vector...
@@ -57,8 +57,7 @@ pub fn run(opt: Opt) -> Result<()> {
         );
 
         // Send header first
-        let serial = serde_json::to_string(&header).unwrap();
-        match stream.write(&serial.as_bytes()) {
+        match stream.write(&header.serialize()) {
             Ok(_) => true,
             Err(s) => return Err(s),
         };
@@ -124,10 +123,11 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportResponse> {
         Ok(l) => l,
         Err(_) => return None,
     };
-    //.expect("Failed to receive TeleportResponse");
+
     let fix = &buf[..len];
-    let resp: TeleportResponse = match serde_json::from_str(str::from_utf8(&fix).unwrap()) {
-        Ok(s) => s,
+    let mut resp = TeleportResponse::new(TeleportStatus::WrongVersion);
+    match resp.deserialize(fix.to_vec()) {
+        Ok(_) => true,
         Err(_) => return None,
     };
 
@@ -135,7 +135,7 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportResponse> {
 }
 
 /// Send function receives the ACK for data and sends the file data
-fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<()> {
+fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(), Error> {
     let mut buf: [u8; 4096] = [0; 4096];
 
     // Send file data
@@ -154,7 +154,7 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
 
         let data = &buf[..len];
 
-        // Send that data chunk
+        // Send the data chunk
         match stream.write_all(&data) {
             Ok(_) => true,
             Err(s) => return Err(s),
