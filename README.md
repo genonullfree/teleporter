@@ -6,7 +6,6 @@ Teleport lets you pass the destination and a list of files you wish to send and 
 
 # Usage
 ```
-teleport 0.2.0
 Teleport is a simple application for sending files from Point A to Point B
 
 USAGE:
