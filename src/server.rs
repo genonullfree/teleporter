@@ -163,6 +163,14 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         }
 
         received += len as u64;
+
+        if received > header.filesize {
+            println!(
+                "Error: Received {} greater than filesize!",
+                received - header.filesize
+            );
+            break;
+        }
     }
 
     Ok(())
