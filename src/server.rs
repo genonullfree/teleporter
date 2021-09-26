@@ -74,10 +74,11 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     };
 
     if header.protocol != PROTOCOL.to_string() || header.version != VERSION.to_string() {
-        println!("Error: Client is not speaking {} {}", PROTOCOL, VERSION);
-        let resp = TeleportResponse {
-            ack: TeleportStatus::WrongVersion,
-        };
+        println!(
+            "Error: Version mismatch from: {:?}! Us: {}:{} Client: {}:{}",
+            ip, PROTOCOL, VERSION, header.protocol, header.version
+        );
+        let resp = TeleportResponse::new(TeleportStatus::WrongVersion);
         return send_ack(resp, &stream);
     }
 

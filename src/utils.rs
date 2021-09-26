@@ -191,18 +191,33 @@ impl TryFrom<u8> for TeleportStatus {
 
 impl TeleportResponse {
     pub fn new(status: TeleportStatus) -> TeleportResponse {
-        TeleportResponse { ack: status }
+        TeleportResponse {
+            ack: status,
+            version: VERSION.to_string(),
+        }
     }
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::<u8>::new();
         out.push(self.ack as u8);
+        out.append(&mut self.version.clone().into_bytes());
+        out.push(0);
+        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
+        out.push(csum);
         out
     }
 
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
         let mut buf: &[u8] = &input;
+        let size = input.len();
         self.ack = buf.read_u8().unwrap().try_into().unwrap();
+        self.version = TeleportInit::vec_to_string(&input[1..]);
+        let csumr = input[size - 1];
+        let csum: u8 = *&input[..size - 2].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        if csum != csumr {
+            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+        }
+
         Ok(())
     }
 }
@@ -265,21 +280,25 @@ mod tests {
 
     #[test]
     fn test_teleportresponse_serialize() {
-        let t = TeleportResponse::new(TeleportStatus::WrongVersion);
-
+        let mut t = TeleportResponse::new(TeleportStatus::WrongVersion);
+        t.version = "0.2.3".to_string();
         let te = t.serialize();
-        let test = [5];
+        let test = [5, 48, 46, 50, 46, 51, 0, 246];
 
         assert_eq!(te, test);
     }
 
     #[test]
     fn test_teleportresponse_deserialize() {
-        let t = [5];
+        let t = [5, 48, 46, 50, 46, 51, 0, 246];
         let mut te = TeleportResponse::new(TeleportStatus::Proceed);
-        let test = TeleportResponse::new(TeleportStatus::WrongVersion);
+        let test = TeleportResponse {
+            ack: TeleportStatus::WrongVersion,
+            version: "0.2.3".to_string(),
+        };
 
         te.deserialize(t.to_vec()).unwrap();
+        te.version = "0.2.3".to_string();
         assert_eq!(test, te);
     }
 }
