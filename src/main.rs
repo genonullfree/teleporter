@@ -50,7 +50,7 @@ pub struct TeleportInit {
     overwrite: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TeleportResponse {
     ack: TeleportStatus,
 }

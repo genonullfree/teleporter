@@ -224,7 +224,7 @@ mod tests {
     fn test_teleportinit_serialize() {
         let t: TeleportInit = TeleportInit {
             protocol: PROTOCOL.to_string(),
-            version: VERSION.to_string(),
+            version: "0.2.2".to_string(),
             filename: "testfile.bin".to_string(),
             filenum: 1,
             totalfiles: 999,
@@ -245,7 +245,7 @@ mod tests {
     fn test_teleportinit_deserialize() {
         let t: TeleportInit = TeleportInit {
             protocol: PROTOCOL.to_string(),
-            version: VERSION.to_string(),
+            version: "0.2.2".to_string(),
             filename: "testfile.bin".to_string(),
             filenum: 1,
             totalfiles: 999,
@@ -261,5 +261,25 @@ mod tests {
         let mut te = TeleportInit::new();
         te.deserialize(test.to_vec()).unwrap();
         assert_eq!(te, t);
+    }
+
+    #[test]
+    fn test_teleportresponse_serialize() {
+        let t = TeleportResponse::new(TeleportStatus::WrongVersion);
+
+        let te = t.serialize();
+        let test = [5];
+
+        assert_eq!(te, test);
+    }
+
+    #[test]
+    fn test_teleportresponse_deserialize() {
+        let t = [5];
+        let mut te = TeleportResponse::new(TeleportStatus::Proceed);
+        let test = TeleportResponse::new(TeleportStatus::WrongVersion);
+
+        te.deserialize(t.to_vec()).unwrap();
+        assert_eq!(test, te);
     }
 }
