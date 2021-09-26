@@ -98,7 +98,10 @@ pub fn run(opt: Opt) -> Result<(), Error> {
                 continue;
             }
             TeleportStatus::WrongVersion => {
-                println!("Error: The server does not speak {} {}", PROTOCOL, VERSION);
+                println!(
+                    "Error: Version mismatch! Server: {} Us: {}",
+                    recv.version, VERSION
+                );
                 break;
             }
             _ => (),

@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "teleport"
-version = "0.2.3"
+version = "0.2.5"
 dependencies = [
  "byteorder",
  "structopt",
