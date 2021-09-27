@@ -94,6 +94,16 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         return send_ack(resp, &stream);
     }
 
+    // Create recursive dirs
+    match fs::create_dir_all(Path::new(&header.filename).parent().unwrap()) {
+        Ok(_) => true,
+        Err(_) => {
+            println!("Error: unable to create directories: {}", &header.filename);
+            let resp = TeleportResponse::new(TeleportStatus::NoPermission);
+            return send_ack(resp, &stream);
+        }
+    };
+
     // Open file for writing
     file = match File::create(&header.filename) {
         Ok(f) => f,
