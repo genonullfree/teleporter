@@ -3,36 +3,45 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use std::convert::{TryFrom, TryInto};
 
 struct SizeUnit {
-    partial: f64,
-    partial_unit: char,
-    total: f64,
-    total_unit: char,
+    value: f64,
+    unit: char,
+}
+
+struct UpdateUnit {
+    partial: SizeUnit,
+    total: SizeUnit,
+    percent: f64,
 }
 
 pub fn print_updates(received: f64, header: &TeleportInit) {
-    let percent: f64 = (received as f64 / header.filesize as f64) * 100f64;
-    let units = convert_units(received as f64, header.filesize as f64);
+    let units = update_units(received as f64, header.filesize as f64);
     print!(
         "\r => {:>8.03}{} of {:>8.03}{} ({:02.02}%)",
-        units.partial, units.partial_unit, units.total, units.total_unit, percent
+        units.partial.value, units.partial.unit, units.total.value, units.total.unit, units.percent
     );
     io::stdout().flush().unwrap();
 }
 
-fn convert_units(mut partial: f64, mut total: f64) -> SizeUnit {
+fn update_units(partial: f64, total: f64) -> UpdateUnit {
+    let percent: f64 = (partial as f64 / total as f64) * 100f64;
+    let p = identify_unit(partial);
+    let t = identify_unit(total);
+
+    UpdateUnit {
+        partial: p,
+        total: t,
+        percent: percent,
+    }
+}
+
+fn identify_unit(mut value: f64) -> SizeUnit {
     let unit = ['B', 'K', 'M', 'G', 'T'];
-    let mut out = SizeUnit {
-        partial: 0.0,
-        partial_unit: 'B',
-        total: 0.0,
-        total_unit: 'B',
-    };
 
     let mut count = 0;
     loop {
-        if (total / 1024.0) > 1.0 {
+        if (value / 1024.0) > 1.0 {
             count += 1;
-            total /= 1024.0;
+            value /= 1024.0;
         } else {
             break;
         }
@@ -40,24 +49,11 @@ fn convert_units(mut partial: f64, mut total: f64) -> SizeUnit {
             break;
         }
     }
-    out.total = total;
-    out.total_unit = unit[count];
 
-    count = 0;
-    loop {
-        if (partial / 1024.0) > 1.0 {
-            count += 1;
-            partial /= 1024.0;
-        } else {
-            break;
-        }
-        if count == unit.len() - 1 {
-            break;
-        }
+    SizeUnit {
+        value: value,
+        unit: unit[count],
     }
-    out.partial = partial;
-    out.partial_unit = unit[count];
-    out
 }
 
 impl TeleportInit {
@@ -164,6 +160,19 @@ impl TeleportInit {
     }
 }
 
+impl PartialEq for TeleportInit {
+    fn eq(&self, other: &Self) -> bool {
+        self.protocol == other.protocol
+            && self.version == other.version
+            && self.filename == other.filename
+            && self.filenum == other.filenum
+            && self.totalfiles == other.totalfiles
+            && self.filesize == other.filesize
+            && self.chmod == other.chmod
+            && self.overwrite == other.overwrite
+    }
+}
+
 impl TryFrom<u8> for TeleportStatus {
     type Error = &'static str;
 
@@ -182,18 +191,114 @@ impl TryFrom<u8> for TeleportStatus {
 
 impl TeleportResponse {
     pub fn new(status: TeleportStatus) -> TeleportResponse {
-        TeleportResponse { ack: status }
+        TeleportResponse {
+            ack: status,
+            version: VERSION.to_string(),
+        }
     }
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::<u8>::new();
         out.push(self.ack as u8);
+        out.append(&mut self.version.clone().into_bytes());
+        out.push(0);
+        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
+        out.push(csum);
         out
     }
 
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
         let mut buf: &[u8] = &input;
+        let size = input.len();
         self.ack = buf.read_u8().unwrap().try_into().unwrap();
+        self.version = TeleportInit::vec_to_string(&input[1..]);
+        let csumr = input[size - 1];
+        let csum: u8 = *&input[..size - 2].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        if csum != csumr {
+            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+        }
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_update_unit() {
+        let pe = 2.0;
+        let te = 1_234_567_890_123_456.0;
+        let s = update_units(pe, te);
+        assert_eq!(s.partial.unit, 'B');
+        assert_eq!(s.total.unit, 'T');
+    }
+
+    #[test]
+    fn test_teleportinit_serialize() {
+        let t: TeleportInit = TeleportInit {
+            protocol: PROTOCOL.to_string(),
+            version: "0.2.2".to_string(),
+            filename: "testfile.bin".to_string(),
+            filenum: 1,
+            totalfiles: 999,
+            filesize: 9001,
+            chmod: 00755,
+            overwrite: true,
+        };
+        let s = t.serialize();
+        let test = [
+            62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115,
+            116, 102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0,
+            0, 0, 0, 41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
+        ];
+        assert_eq!(s, test);
+    }
+
+    #[test]
+    fn test_teleportinit_deserialize() {
+        let t: TeleportInit = TeleportInit {
+            protocol: PROTOCOL.to_string(),
+            version: "0.2.2".to_string(),
+            filename: "testfile.bin".to_string(),
+            filenum: 1,
+            totalfiles: 999,
+            filesize: 9001,
+            chmod: 00755,
+            overwrite: true,
+        };
+        let test = [
+            62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115,
+            116, 102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0,
+            0, 0, 0, 41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
+        ];
+        let mut te = TeleportInit::new();
+        te.deserialize(test.to_vec()).unwrap();
+        assert_eq!(te, t);
+    }
+
+    #[test]
+    fn test_teleportresponse_serialize() {
+        let mut t = TeleportResponse::new(TeleportStatus::WrongVersion);
+        t.version = "0.2.3".to_string();
+        let te = t.serialize();
+        let test = [5, 48, 46, 50, 46, 51, 0, 246];
+
+        assert_eq!(te, test);
+    }
+
+    #[test]
+    fn test_teleportresponse_deserialize() {
+        let t = [5, 48, 46, 50, 46, 51, 0, 246];
+        let mut te = TeleportResponse::new(TeleportStatus::Proceed);
+        let test = TeleportResponse {
+            ack: TeleportStatus::WrongVersion,
+            version: "0.2.3".to_string(),
+        };
+
+        te.deserialize(t.to_vec()).unwrap();
+        te.version = "0.2.3".to_string();
+        assert_eq!(test, te);
     }
 }

@@ -50,9 +50,10 @@ pub struct TeleportInit {
     overwrite: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TeleportResponse {
     ack: TeleportStatus,
+    version: String,
 }
 
 /// TeleportStatus type when header is received and ready to receive file data or not
