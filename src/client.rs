@@ -1,14 +1,65 @@
 use crate::utils::print_updates;
 use crate::*;
+use std::path::Path;
+
+fn get_file_list(opt: &Opt) -> Vec<String> {
+    let mut files = Vec::<String>::new();
+
+    for item in opt.input.iter() {
+        if item.is_dir() {
+            let mut tmp = match scope_dir(&item.to_path_buf()) {
+                Ok(t) => t,
+                Err(_) => {
+                    println!("Error: Cannot read item: {:?}", item);
+                    continue;
+                }
+            };
+            files.append(&mut tmp);
+        } else if item.is_file() {
+            files.push(item.to_str().unwrap().to_string());
+        }
+    }
+
+    files
+}
+
+fn scope_dir(dir: &PathBuf) -> Result<Vec<String>, Error> {
+    let path = Path::new(&dir);
+    let mut files = Vec::<String>::new();
+
+    for entry in path.read_dir().unwrap() {
+        println!("files: {:?}", &files);
+        if entry.as_ref().unwrap().file_type().unwrap().is_dir() {
+            if entry.as_ref().unwrap().path() == *dir {
+                continue;
+            }
+
+            let mut tmp = match scope_dir(&entry.as_ref().unwrap().path()) {
+                Ok(t) => t,
+                Err(_) => {
+                    println!("Error: Cannot read dir: {:?}", entry);
+                    continue;
+                }
+            };
+            files.append(&mut tmp);
+        } else if entry.as_ref().unwrap().file_type().unwrap().is_file() {
+            files.push(entry.unwrap().path().to_str().unwrap().to_string());
+        }
+    }
+
+    Ok(files)
+}
 
 /// Client function sends filename and file data for each filepath
 pub fn run(opt: Opt) -> Result<(), Error> {
     println!("Teleport Client {}", VERSION);
 
+    let files = get_file_list(&opt);
+
     // For each filepath in the input vector...
-    for (num, item) in opt.input.iter().enumerate() {
-        let filepath = item.to_str().unwrap();
-        let filename = item.file_name().unwrap();
+    for (num, item) in files.iter().enumerate() {
+        let filepath = item;
+        let mut filename = filepath.clone().to_string();
 
         // Validate file
         let file = match File::open(&filepath) {
@@ -18,6 +69,12 @@ pub fn run(opt: Opt) -> Result<(), Error> {
                 return Err(s);
             }
         };
+
+        // Remove '/' root if exists
+        if filepath.chars().nth(0) == Some('/') {
+            filename.remove(0);
+        }
+
         let meta = match file.metadata() {
             Ok(m) => m,
             Err(s) => return Err(s),
@@ -26,9 +83,9 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             protocol: PROTOCOL.to_string(),
             version: VERSION.to_string(),
             filenum: (num + 1) as u64,
-            totalfiles: opt.input.len() as u64,
+            totalfiles: files.len() as u64,
             filesize: meta.len(),
-            filename: filename.to_str().unwrap().to_string(),
+            filename: filename.to_string(),
             chmod: meta.permissions().mode(),
             overwrite: opt.overwrite,
         };
