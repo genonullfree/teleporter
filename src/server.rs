@@ -82,11 +82,6 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         return send_ack(resp, &stream);
     }
 
-    let mut recv_data = recv_list.lock().unwrap();
-    recv_data.push(header.filename.clone());
-    print_list(&recv_data);
-    drop(recv_data);
-
     // Test if overwrite is false and file exists
     if !header.overwrite && Path::new(&header.filename).exists() {
         println!(" => Refusing to overwrite file: {}", &header.filename);
@@ -134,6 +129,11 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         Ok(_) => true,
         Err(s) => return Err(s),
     };
+
+    let mut recv_data = recv_list.lock().unwrap();
+    recv_data.push(header.filename.clone());
+    print_list(&recv_data);
+    drop(recv_data);
 
     // Receive file data
     let mut buf: [u8; 4096] = [0; 4096];
