@@ -8,7 +8,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     // For each filepath in the input vector...
     for (num, item) in opt.input.iter().enumerate() {
         let filepath = item.to_str().unwrap();
-        let filename = item.file_name().unwrap();
+        let mut filename = filepath.clone().to_string();
 
         // Validate file
         let file = match File::open(&filepath) {
@@ -18,6 +18,12 @@ pub fn run(opt: Opt) -> Result<(), Error> {
                 return Err(s);
             }
         };
+
+        // Remove '/' root if exists
+        if filepath.chars().nth(0) == Some('/') {
+            filename.remove(0);
+        }
+
         let meta = match file.metadata() {
             Ok(m) => m,
             Err(s) => return Err(s),
@@ -28,7 +34,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             filenum: (num + 1) as u64,
             totalfiles: opt.input.len() as u64,
             filesize: meta.len(),
-            filename: filename.to_str().unwrap().to_string(),
+            filename: filename.to_string(),
             chmod: meta.permissions().mode(),
             overwrite: opt.overwrite,
         };
