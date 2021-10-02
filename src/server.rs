@@ -136,13 +136,16 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     drop(recv_data);
 
     // Receive file data
-    let mut buf: [u8; 4096] = [0; 4096];
+    let mut buf: [u8; 5120] = [0; 5120];
     let mut received: u64 = 0;
     loop {
         // Read from network connection
         let len = match stream.read(&mut buf) {
             Ok(l) => l,
-            Err(s) => return Err(s),
+            Err(s) => {
+                teleport_data_ack(&stream, TeleportDataStatus::Error)?;
+                return Err(s);
+            }
         };
 
         if len == 0 {
@@ -152,8 +155,10 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
                 recv_data.retain(|x| x != &header.filename);
                 print_list(&recv_data);
                 drop(recv_data);
+                teleport_data_ack(&stream, TeleportDataStatus::Success)?;
             } else {
                 println!(" => Error receiving: {}", &header.filename);
+                teleport_data_ack(&stream, TeleportDataStatus::Error)?;
             }
             break;
         }
@@ -162,7 +167,10 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         // Write received data to file
         let wrote = match file.write(data) {
             Ok(w) => w,
-            Err(s) => return Err(s),
+            Err(s) => {
+                teleport_data_ack(&stream, TeleportDataStatus::Error)?;
+                return Err(s);
+            }
         };
 
         if len != wrote {
@@ -170,6 +178,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
                 "Error writing to file: {} (read: {}, wrote: {}). Out of space?",
                 &header.filename, len, wrote
             );
+            teleport_data_ack(&stream, TeleportDataStatus::Error)?;
             break;
         }
 
@@ -180,9 +189,20 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
                 "Error: Received {} greater than filesize!",
                 received - header.filesize
             );
+            teleport_data_ack(&stream, TeleportDataStatus::Error)?;
             break;
         }
+
+        teleport_data_ack(&stream, TeleportDataStatus::Success)?;
     }
 
     Ok(())
+}
+
+fn teleport_data_ack(mut stream: &TcpStream, status: TeleportDataStatus) -> Result<(), Error> {
+    let s = TeleportDataAck::new(status).serialize();
+    match stream.write(&s) {
+        Ok(_) => Ok(()),
+        Err(s) => Err(s),
+    }
 }
