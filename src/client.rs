@@ -213,9 +213,14 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
         }
 
         let data = &buf[..len];
+        let chunk = TeleportData {
+            length: len as u32,
+            offset: sent as u64,
+            data: data.to_vec(),
+        };
 
         // Send the data chunk
-        match stream.write_all(data) {
+        match stream.write_all(&chunk.serialize()) {
             Ok(_) => true,
             Err(s) => return Err(s),
         };
@@ -224,19 +229,14 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
             Err(s) => return Err(s),
         };
 
-        match recv_data_ack(&stream) {
-            Ok(_) => (),
-            Err(s) => return Err(s),
-        };
-
-        sent += length;
+        sent += len;
         print_updates(sent as f64, &header);
     }
 
     Ok(())
 }
 
-fn recv_data_ack(mut stream: &TcpStream) -> Result<(), Error> {
+/*fn recv_data_ack(mut stream: &TcpStream) -> Result<(), Error> {
     let mut buf: [u8; 128] = [0; 128]; // TODO: is there a better way to do this?
     let len = match stream.read(&mut buf) {
         Ok(l) => l,
@@ -252,4 +252,4 @@ fn recv_data_ack(mut stream: &TcpStream) -> Result<(), Error> {
             Err(Error::new(ErrorKind::InvalidData, "Error Status returned"))
         }
     }
-}
+}*/
