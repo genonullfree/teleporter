@@ -139,19 +139,18 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     // Receive file data
     let mut peek: [u8; 4] = [0; 4];
     let mut received: u64 = 0;
+    let mut data = Vec::<u8>::new();
+    data.resize(5120, 0);
     loop {
-        let mut data = Vec::<u8>::new();
         // Read from network connection
-        let mut len = stream.peek(&mut peek).unwrap();
-        if len > 0 {
-            let mut peek_buf: &[u8] = &peek;
-            let chunk_len = peek_buf.read_u32::<LittleEndian>().unwrap() as usize + 4 + 8 + 1;
-            data.resize(chunk_len, 0);
-            match stream.read_exact(&mut data) {
-                Ok(_) => len = chunk_len,
-                Err(_) => len = 0,
-            };
-        }
+        stream.peek(&mut peek)?;
+        let mut peek_buf: &[u8] = &peek;
+        let chunk_len = peek_buf.read_u32::<LittleEndian>().unwrap() as usize + 4 + 8 + 1;
+        let data_slice = &mut data[..chunk_len];
+        let len = match stream.read_exact(data_slice) {
+            Ok(_) => chunk_len,
+            Err(_) => 0,
+        };
 
         if len == 0 {
             if received == header.filesize {
@@ -161,10 +160,9 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
             }
             break;
         }
-        //let data = &buf[..len];
 
         let mut chunk = TeleportData::new();
-        chunk.deserialize(data)?;
+        chunk.deserialize(data_slice)?;
 
         // Write received data to file
         let wrote = match file.write(&chunk.data) {
@@ -175,6 +173,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         };
 
         if chunk.length as usize != wrote {
+            println!("{:?}", chunk);
             println!(
                 "Error writing to file: {} (read: {}, wrote: {}). Out of space?",
                 &header.filename, chunk.length, wrote
