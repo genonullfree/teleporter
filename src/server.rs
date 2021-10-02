@@ -1,4 +1,5 @@
 use crate::*;
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::fs;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -136,73 +137,66 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     drop(recv_data);
 
     // Receive file data
-    let mut buf: [u8; 5120] = [0; 5120];
+    let mut peek: [u8; 4] = [0; 4];
     let mut received: u64 = 0;
     loop {
+        let mut data = Vec::<u8>::new();
         // Read from network connection
-        let len = match stream.read(&mut buf) {
-            Ok(l) => l,
-            Err(s) => {
-                teleport_data_ack(&stream, TeleportDataStatus::Error)?;
-                return Err(s);
-            }
-        };
+        let mut len = stream.peek(&mut peek).unwrap();
+        if len > 0 {
+            let mut peek_buf: &[u8] = &peek;
+            let chunk_len = peek_buf.read_u32::<LittleEndian>().unwrap() as usize + 4 + 8 + 1;
+            data.resize(chunk_len, 0);
+            match stream.read_exact(&mut data) {
+                Ok(_) => len = chunk_len,
+                Err(_) => len = 0,
+            };
+        }
 
         if len == 0 {
             if received == header.filesize {
                 println!(" => Received file: {} from: {:?}", &header.filename, ip);
-                let mut recv_data = recv_list.lock().unwrap();
-                recv_data.retain(|x| x != &header.filename);
-                print_list(&recv_data);
-                drop(recv_data);
-                teleport_data_ack(&stream, TeleportDataStatus::Success)?;
             } else {
                 println!(" => Error receiving: {}", &header.filename);
-                teleport_data_ack(&stream, TeleportDataStatus::Error)?;
             }
             break;
         }
-        let data = &buf[..len];
+        //let data = &buf[..len];
+
+        let mut chunk = TeleportData::new();
+        chunk.deserialize(data)?;
 
         // Write received data to file
-        let wrote = match file.write(data) {
+        let wrote = match file.write(&chunk.data) {
             Ok(w) => w,
             Err(s) => {
-                teleport_data_ack(&stream, TeleportDataStatus::Error)?;
                 return Err(s);
             }
         };
 
-        if len != wrote {
+        if chunk.length as usize != wrote {
             println!(
                 "Error writing to file: {} (read: {}, wrote: {}). Out of space?",
-                &header.filename, len, wrote
+                &header.filename, chunk.length, wrote
             );
-            teleport_data_ack(&stream, TeleportDataStatus::Error)?;
             break;
         }
 
-        received += len as u64;
+        received += chunk.length as u64;
 
         if received > header.filesize {
             println!(
                 "Error: Received {} greater than filesize!",
                 received - header.filesize
             );
-            teleport_data_ack(&stream, TeleportDataStatus::Error)?;
             break;
         }
-
-        teleport_data_ack(&stream, TeleportDataStatus::Success)?;
     }
+
+    let mut recv_data = recv_list.lock().unwrap();
+    recv_data.retain(|x| x != &header.filename);
+    print_list(&recv_data);
+    drop(recv_data);
 
     Ok(())
-}
-
-fn teleport_data_ack(mut stream: &TcpStream, status: TeleportDataStatus) -> Result<(), Error> {
-    let s = TeleportDataAck::new(status).serialize();
-    match stream.write(&s) {
-        Ok(_) => Ok(()),
-        Err(s) => Err(s),
-    }
 }

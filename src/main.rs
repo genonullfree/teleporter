@@ -59,7 +59,7 @@ pub struct TeleportInitAck {
 #[derive(Debug, PartialEq)]
 pub struct TeleportData {
     length: u32,
-    ofset: u64,
+    offset: u64,
     data: Vec<u8>,
 }
 

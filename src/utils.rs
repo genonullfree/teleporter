@@ -154,7 +154,10 @@ impl TeleportInit {
         let csumr = buf.read_u8().unwrap();
         let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
-            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportInit checksum is invalid",
+            ));
         }
         Ok(())
     }
@@ -199,6 +202,8 @@ impl TryFrom<u8> for TeleportInitStatus {
     }
 }
 
+//impl TryFrom<u8> for TeleportDataStatus 
+
 impl TeleportInitAck {
     pub fn new(status: TeleportInitStatus) -> TeleportInitAck {
         TeleportInitAck {
@@ -224,14 +229,17 @@ impl TeleportInitAck {
         let csumr = input[size - 1];
         let csum: u8 = input[..size - 2].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
-            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportInitAck checksum is invalid",
+            ));
         }
 
         Ok(())
     }
 }
 
-impl TeleportDataAck {
+/*impl TeleportDataAck {
     pub fn new(status: TeleportDataStatus) -> TeleportDataAck {
         TeleportDataAck { ack: status }
     }
@@ -251,12 +259,15 @@ impl TeleportDataAck {
         let csumr = input[size - 1];
         let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
-            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportDataAck checksum is invalid",
+            ));
         }
 
         Ok(())
     }
-}
+}*/
 
 impl Default for TeleportData {
     fn default() -> Self {
@@ -297,7 +308,13 @@ impl TeleportData {
         let csumr = input[size - 1];
         let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
-            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+            println!("data: {:?}", self.data);
+            println!("\nlength: {} offset: {}", self.length, self.offset);
+            println!("expected: {}, received: {}", csum, csumr);
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportData checksum is invalid",
+            ));
         }
 
         Ok(())
