@@ -30,7 +30,7 @@ fn update_units(partial: f64, total: f64) -> UpdateUnit {
     UpdateUnit {
         partial: p,
         total: t,
-        percent: percent,
+        percent,
     }
 }
 
@@ -51,7 +51,7 @@ fn identify_unit(mut value: f64) -> SizeUnit {
     }
 
     SizeUnit {
-        value: value,
+        value,
         unit: unit[count],
     }
 }
@@ -72,7 +72,7 @@ impl TeleportInit {
 
     pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::<u8>::new();
-        let size: u32 = self.len() as u32 + 5; // sizeof(struct) + 1csum + 4len
+        let size: u32 = self.size() as u32 + 5; // sizeof(struct) + 1csum + 4len
         out.append(&mut size.to_le_bytes().to_vec());
         out.append(&mut self.protocol.clone().into_bytes());
         out.push(0);
@@ -91,7 +91,7 @@ impl TeleportInit {
         out
     }
 
-    pub fn len(&self) -> usize {
+    pub fn size(&self) -> usize {
         let mut out: usize = 0;
         out += self.protocol.len() + 1;
         out += self.version.len() + 1;
@@ -152,11 +152,17 @@ impl TeleportInit {
         self.chmod = buf.read_u32::<LittleEndian>().unwrap();
         self.overwrite = buf.read_u8().unwrap() > 0;
         let csumr = buf.read_u8().unwrap();
-        let csum: u8 = *&input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
             return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
         }
         Ok(())
+    }
+}
+
+impl Default for TeleportInit {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -173,33 +179,36 @@ impl PartialEq for TeleportInit {
     }
 }
 
-impl TryFrom<u8> for TeleportStatus {
+impl TryFrom<u8> for TeleportInitStatus {
     type Error = &'static str;
 
     fn try_from(v: u8) -> std::result::Result<Self, Self::Error> {
         match v {
-            x if x == TeleportStatus::Proceed as u8 => Ok(TeleportStatus::Proceed),
-            x if x == TeleportStatus::Overwrite as u8 => Ok(TeleportStatus::Overwrite),
-            x if x == TeleportStatus::NoOverwrite as u8 => Ok(TeleportStatus::NoOverwrite),
-            x if x == TeleportStatus::NoSpace as u8 => Ok(TeleportStatus::NoSpace),
-            x if x == TeleportStatus::NoPermission as u8 => Ok(TeleportStatus::NoPermission),
-            x if x == TeleportStatus::WrongVersion as u8 => Ok(TeleportStatus::WrongVersion),
-            _ => Err("TeleportStatus is invalid"),
+            x if x == TeleportInitStatus::Proceed as u8 => Ok(TeleportInitStatus::Proceed),
+            x if x == TeleportInitStatus::Overwrite as u8 => Ok(TeleportInitStatus::Overwrite),
+            x if x == TeleportInitStatus::NoOverwrite as u8 => Ok(TeleportInitStatus::NoOverwrite),
+            x if x == TeleportInitStatus::NoSpace as u8 => Ok(TeleportInitStatus::NoSpace),
+            x if x == TeleportInitStatus::NoPermission as u8 => {
+                Ok(TeleportInitStatus::NoPermission)
+            }
+            x if x == TeleportInitStatus::WrongVersion as u8 => {
+                Ok(TeleportInitStatus::WrongVersion)
+            }
+            _ => Err("TeleportInitStatus is invalid"),
         }
     }
 }
 
-impl TeleportResponse {
-    pub fn new(status: TeleportStatus) -> TeleportResponse {
-        TeleportResponse {
+impl TeleportInitAck {
+    pub fn new(status: TeleportInitStatus) -> TeleportInitAck {
+        TeleportInitAck {
             ack: status,
             version: VERSION.to_string(),
         }
     }
 
     pub fn serialize(&self) -> Vec<u8> {
-        let mut out = Vec::<u8>::new();
-        out.push(self.ack as u8);
+        let mut out = vec![self.ack as u8];
         out.append(&mut self.version.clone().into_bytes());
         out.push(0);
         let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
@@ -213,7 +222,7 @@ impl TeleportResponse {
         self.ack = buf.read_u8().unwrap().try_into().unwrap();
         self.version = TeleportInit::vec_to_string(&input[1..]);
         let csumr = input[size - 1];
-        let csum: u8 = *&input[..size - 2].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        let csum: u8 = input[..size - 2].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
             return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
         }
@@ -280,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_teleportresponse_serialize() {
-        let mut t = TeleportResponse::new(TeleportStatus::WrongVersion);
+        let mut t = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
         t.version = "0.2.3".to_string();
         let te = t.serialize();
         let test = [5, 48, 46, 50, 46, 51, 0, 246];
@@ -291,9 +300,9 @@ mod tests {
     #[test]
     fn test_teleportresponse_deserialize() {
         let t = [5, 48, 46, 50, 46, 51, 0, 246];
-        let mut te = TeleportResponse::new(TeleportStatus::Proceed);
-        let test = TeleportResponse {
-            ack: TeleportStatus::WrongVersion,
+        let mut te = TeleportInitAck::new(TeleportInitStatus::Proceed);
+        let test = TeleportInitAck {
+            ack: TeleportInitStatus::WrongVersion,
             version: "0.2.3".to_string(),
         };
 
