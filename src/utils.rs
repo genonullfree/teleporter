@@ -231,6 +231,79 @@ impl TeleportInitAck {
     }
 }
 
+impl TeleportDataAck {
+    pub fn new(status: TeleportDataStatus) -> TeleportDataAck {
+        TeleportDataAck { ack: status }
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = vec![self.ack as u8];
+        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
+        out.push(csum);
+
+        out
+    }
+
+    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
+        let mut buf: &[u8] = &input;
+        let size = input.len();
+        self.ack = buf.read_u8().unwrap().try_into().unwrap();
+        let csumr = input[size - 1];
+        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        if csum != csumr {
+            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for TeleportData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TeleportData {
+    pub fn new() -> TeleportData {
+        TeleportData {
+            length: 0,
+            offset: 0,
+            data: vec![],
+        }
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+        let len: u32 = self.data.len() as u32;
+        out.append(&mut len.to_le_bytes().to_vec());
+        out.append(&mut self.offset.to_le_bytes().to_vec());
+        out.append(&mut self.data.clone());
+        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
+        out.push(csum);
+        out
+    }
+
+    pub fn size(&self) -> usize {
+        self.data.len() + 4 + 8
+    }
+
+    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
+        let size = input.len();
+        let mut buf: &[u8] = &input;
+        self.length = buf.read_u32::<LittleEndian>().unwrap();
+        self.offset = buf.read_u64::<LittleEndian>().unwrap();
+        self.data = input[12..size - 1].to_vec();
+        let csumr = input[size - 1];
+        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        if csum != csumr {
+            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
