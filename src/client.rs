@@ -23,7 +23,7 @@ fn get_file_list(opt: &Opt) -> Vec<String> {
     files
 }
 
-fn scope_dir(dir: &PathBuf) -> Result<Vec<String>, Error> {
+fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
     let path = Path::new(&dir);
     let mut files = Vec::<String>::new();
 
@@ -71,7 +71,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         // Remove '/' root if exists
-        if filepath.chars().nth(0) == Some('/') {
+        if filepath.starts_with('/') {
             filename.remove(0);
         }
 
@@ -123,38 +123,38 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         let recv = match recv_ack(&stream) {
             Some(t) => t,
             None => {
-                println!("Receive TeleportResponse timed out");
+                println!("Receive TeleportInitAck timed out");
                 return Ok(());
             }
         };
 
         // Validate response
         match recv.ack {
-            TeleportStatus::Overwrite => {
+            TeleportInitStatus::Overwrite => {
                 println!("The server is overwriting the file: {}", &header.filename)
             }
-            TeleportStatus::NoOverwrite => {
+            TeleportInitStatus::NoOverwrite => {
                 println!(
                     "The server refused to overwrite the file: {}",
                     &header.filename
                 );
                 continue;
             }
-            TeleportStatus::NoPermission => {
+            TeleportInitStatus::NoPermission => {
                 println!(
                     "The server does not have permission to write to this file: {}",
                     &header.filename
                 );
                 continue;
             }
-            TeleportStatus::NoSpace => {
+            TeleportInitStatus::NoSpace => {
                 println!(
                     "The server has no space available to write the file: {}",
                     &header.filename
                 );
                 continue;
             }
-            TeleportStatus::WrongVersion => {
+            TeleportInitStatus::WrongVersion => {
                 println!(
                     "Error: Version mismatch! Server: {} Us: {}",
                     recv.version, VERSION
@@ -175,7 +175,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     Ok(())
 }
 
-fn recv_ack(mut stream: &TcpStream) -> Option<TeleportResponse> {
+fn recv_ack(mut stream: &TcpStream) -> Option<TeleportInitAck> {
     let mut buf: [u8; 4096] = [0; 4096];
 
     // Receive ACK that the server is ready for data
@@ -185,7 +185,7 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportResponse> {
     };
 
     let fix = &buf[..len];
-    let mut resp = TeleportResponse::new(TeleportStatus::WrongVersion);
+    let mut resp = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
     match resp.deserialize(fix.to_vec()) {
         Ok(_) => true,
         Err(_) => return None,
@@ -215,7 +215,7 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
         let data = &buf[..len];
 
         // Send the data chunk
-        match stream.write_all(&data) {
+        match stream.write_all(data) {
             Ok(_) => true,
             Err(s) => return Err(s),
         };

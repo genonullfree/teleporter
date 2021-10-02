@@ -36,7 +36,7 @@ pub struct Opt {
 }
 
 const PROTOCOL: &str = "TELEPORT";
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug)]
 pub struct TeleportInit {
@@ -51,20 +51,38 @@ pub struct TeleportInit {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TeleportResponse {
-    ack: TeleportStatus,
+pub struct TeleportInitAck {
+    ack: TeleportInitStatus,
     version: String,
 }
 
-/// TeleportStatus type when header is received and ready to receive file data or not
+#[derive(Debug, PartialEq)]
+pub struct TeleportData {
+    length: u32,
+    ofset: u64,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TeleportDataAck {
+    ack: TeleportDataStatus,
+}
+
+/// TeleportInitStatus type when header is received and ready to receive file data or not
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum TeleportStatus {
+pub enum TeleportInitStatus {
     Proceed,      // Success
     Overwrite,    // Success
     NoOverwrite,  // Error
     NoSpace,      // Error
     NoPermission, // Error
     WrongVersion, // Error
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum TeleportDataStatus {
+    Success,
+    Error,
 }
 
 fn main() {
@@ -80,10 +98,7 @@ fn main() {
         out = client::run(opt);
     }
     match out {
-        Ok(()) => return,
-        Err(s) => {
-            println!("Error: {}", s);
-            return;
-        }
+        Ok(()) => {}
+        Err(s) => println!("Error: {}", s),
     };
 }

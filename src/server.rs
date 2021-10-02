@@ -37,7 +37,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     Ok(())
 }
 
-fn send_ack(ack: TeleportResponse, mut stream: &TcpStream) -> Result<(), Error> {
+fn send_ack(ack: TeleportInitAck, mut stream: &TcpStream) -> Result<(), Error> {
     // Encode and send response
     let serial_resp = ack.serialize();
     match stream.write(&serial_resp) {
@@ -73,19 +73,19 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         }
     };
 
-    if header.protocol != PROTOCOL.to_string() || header.version != VERSION.to_string() {
+    if header.protocol != *PROTOCOL || header.version != *VERSION {
         println!(
             "Error: Version mismatch from: {:?}! Us: {}:{} Client: {}:{}",
             ip, PROTOCOL, VERSION, header.protocol, header.version
         );
-        let resp = TeleportResponse::new(TeleportStatus::WrongVersion);
+        let resp = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
         return send_ack(resp, &stream);
     }
 
     // Test if overwrite is false and file exists
     if !header.overwrite && Path::new(&header.filename).exists() {
         println!(" => Refusing to overwrite file: {}", &header.filename);
-        let resp = TeleportResponse::new(TeleportStatus::NoOverwrite);
+        let resp = TeleportInitAck::new(TeleportInitStatus::NoOverwrite);
         return send_ack(resp, &stream);
     }
 
@@ -94,7 +94,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         Ok(_) => true,
         Err(_) => {
             println!("Error: unable to create directories: {}", &header.filename);
-            let resp = TeleportResponse::new(TeleportStatus::NoPermission);
+            let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
             return send_ack(resp, &stream);
         }
     };
@@ -104,7 +104,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         Ok(f) => f,
         Err(_) => {
             println!("Error: unable to create file: {}", &header.filename);
-            let resp = TeleportResponse::new(TeleportStatus::NoPermission);
+            let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
             return send_ack(resp, &stream);
         }
     };
@@ -118,13 +118,13 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         Ok(_) => true,
         Err(_) => {
             println!("Could not set file permissions");
-            let resp = TeleportResponse::new(TeleportStatus::NoPermission);
+            let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
             return send_ack(resp, &stream);
         }
     };
 
     // Send ready for data ACK
-    let resp = TeleportResponse::new(TeleportStatus::Proceed);
+    let resp = TeleportInitAck::new(TeleportInitStatus::Proceed);
     match send_ack(resp, &stream) {
         Ok(_) => true,
         Err(s) => return Err(s),
@@ -160,7 +160,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         let data = &buf[..len];
 
         // Write received data to file
-        let wrote = match file.write(&data) {
+        let wrote = match file.write(data) {
             Ok(w) => w,
             Err(s) => return Err(s),
         };
