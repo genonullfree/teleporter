@@ -202,7 +202,7 @@ impl TryFrom<u8> for TeleportInitStatus {
     }
 }
 
-//impl TryFrom<u8> for TeleportDataStatus 
+//impl TryFrom<u8> for TeleportDataStatus
 
 impl TeleportInitAck {
     pub fn new(status: TeleportInitStatus) -> TeleportInitAck {
@@ -299,9 +299,9 @@ impl TeleportData {
         self.data.len() + 4 + 8
     }
 
-    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
         let size = input.len();
-        let mut buf: &[u8] = &input;
+        let mut buf: &[u8] = input;
         self.length = buf.read_u32::<LittleEndian>().unwrap();
         self.offset = buf.read_u64::<LittleEndian>().unwrap();
         self.data = input[12..size - 1].to_vec();
@@ -325,6 +325,14 @@ impl TeleportData {
 mod tests {
     use super::*;
 
+    const TESTINIT: &[u8] = &[
+        62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115, 116,
+        102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0, 0, 0, 0,
+        41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
+    ];
+    const TESTINITACK: &[u8] = &[5, 48, 46, 50, 46, 51, 0, 246];
+    const TESTDATA: &[u8] = &[4, 0, 0, 0, 184, 34, 0, 0, 0, 0, 0, 0, 10, 10, 32, 3, 21];
+
     #[test]
     fn test_update_unit() {
         let pe = 2.0;
@@ -347,12 +355,7 @@ mod tests {
             overwrite: true,
         };
         let s = t.serialize();
-        let test = [
-            62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115,
-            116, 102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0,
-            0, 0, 0, 41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
-        ];
-        assert_eq!(s, test);
+        assert_eq!(s, TESTINIT);
     }
 
     #[test]
@@ -367,37 +370,53 @@ mod tests {
             chmod: 00755,
             overwrite: true,
         };
-        let test = [
-            62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115,
-            116, 102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0,
-            0, 0, 0, 41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
-        ];
         let mut te = TeleportInit::new();
-        te.deserialize(test.to_vec()).unwrap();
+        te.deserialize(TESTINIT.to_vec()).unwrap();
         assert_eq!(te, t);
     }
 
     #[test]
-    fn test_teleportresponse_serialize() {
+    fn test_teleportinitack_serialize() {
         let mut t = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
         t.version = "0.2.3".to_string();
         let te = t.serialize();
-        let test = [5, 48, 46, 50, 46, 51, 0, 246];
 
-        assert_eq!(te, test);
+        assert_eq!(te, TESTINITACK);
     }
 
     #[test]
-    fn test_teleportresponse_deserialize() {
-        let t = [5, 48, 46, 50, 46, 51, 0, 246];
+    fn test_teleportinitack_deserialize() {
         let mut te = TeleportInitAck::new(TeleportInitStatus::Proceed);
         let test = TeleportInitAck {
             ack: TeleportInitStatus::WrongVersion,
             version: "0.2.3".to_string(),
         };
 
-        te.deserialize(t.to_vec()).unwrap();
+        te.deserialize(TESTINITACK.to_vec()).unwrap();
         te.version = "0.2.3".to_string();
         assert_eq!(test, te);
+    }
+
+    #[test]
+    fn test_teleportdata_serialize() {
+        let t = TeleportData {
+            length: 4,
+            offset: 8888,
+            data: vec![0x0a, 0x0a, 0x20, 0x03],
+        }
+        .serialize();
+        assert_eq!(t, TESTDATA);
+    }
+
+    #[test]
+    fn test_teleportdata_deserialize() {
+        let mut t = TeleportData::new();
+        t.deserialize(TESTDATA).unwrap();
+        let test = TeleportData {
+            length: 4,
+            offset: 8888,
+            data: vec![0x0a, 0x0a, 0x20, 0x03],
+        };
+        assert_eq!(t, test);
     }
 }
