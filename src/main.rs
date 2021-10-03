@@ -1,6 +1,8 @@
+use blake3::Hash;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::io::{Error, ErrorKind};
+use std::io::{Seek, SeekFrom};
 use std::net::Ipv4Addr;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt;
@@ -54,6 +56,15 @@ pub struct TeleportInit {
 pub struct TeleportInitAck {
     ack: TeleportInitStatus,
     version: String,
+    delta: Option<TeleportDelta>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TeleportDelta {
+    size: u64,
+    delta_size: u64,
+    csum: Hash,
+    delta_csum: Vec<Hash>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -72,7 +83,7 @@ pub struct TeleportDataAck {
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TeleportInitStatus {
     Proceed,      // Success
-    Overwrite,    // Success
+    Overwrite,    // Success, delta overwrite
     NoOverwrite,  // Error
     NoSpace,      // Error
     NoPermission, // Error

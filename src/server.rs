@@ -1,6 +1,7 @@
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::fs;
+use std::fs::OpenOptions;
 use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -42,7 +43,7 @@ fn send_ack(ack: TeleportInitAck, mut stream: &TcpStream) -> Result<(), Error> {
     // Encode and send response
     let serial_resp = ack.serialize();
     match stream.write(&serial_resp) {
-        Ok(_) => true,
+        Ok(_) => {}
         Err(s) => return Err(s),
     };
 
@@ -65,7 +66,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let fix = &name_buf[..len];
     let mut header = TeleportInit::new();
     match header.deserialize(fix.to_vec()) {
-        Ok(_) => true,
+        Ok(_) => {}
         Err(_) => {
             return Err(Error::new(
                 ErrorKind::InvalidData,
@@ -92,7 +93,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
 
     // Create recursive dirs
     match fs::create_dir_all(Path::new(&header.filename).parent().unwrap()) {
-        Ok(_) => true,
+        Ok(_) => {}
         Err(_) => {
             println!("Error: unable to create directories: {}", &header.filename);
             let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
@@ -101,13 +102,20 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     };
 
     // Open file for writing
-    file = match File::create(&header.filename) {
+    file = match OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&header.filename)
+    {
         Ok(f) => f,
-        Err(_) => {
-            println!("Error: unable to create file: {}", &header.filename);
-            let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
-            return send_ack(resp, &stream);
-        }
+        Err(_) => match File::create(&header.filename) {
+            Ok(f) => f,
+            Err(_) => {
+                println!("Error: unable to create file: {}", &header.filename);
+                let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
+                return send_ack(resp, &stream);
+            }
+        },
     };
     let meta = match file.metadata() {
         Ok(m) => m,
@@ -116,7 +124,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let mut perms = meta.permissions();
     perms.set_mode(header.chmod);
     match fs::set_permissions(&header.filename, perms) {
-        Ok(_) => true,
+        Ok(_) => {}
         Err(_) => {
             println!("Could not set file permissions");
             let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
@@ -125,9 +133,22 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     };
 
     // Send ready for data ACK
-    let resp = TeleportInitAck::new(TeleportInitStatus::Proceed);
+    let mut resp = TeleportInitAck::new(TeleportInitStatus::Proceed);
+
+    // If overwrite and file exists, build TeleportDelta
+    let mut chunk_size = 5120;
+    if meta.len() > 1024 * 1024 {
+        resp.delta = match utils::calc_delta_hash(&file, 0) {
+            Ok(d) => {
+                chunk_size = d.delta_size + 1024;
+                Some(d)
+            }
+            _ => None,
+        };
+    }
+
     match send_ack(resp, &stream) {
-        Ok(_) => true,
+        Ok(_) => {}
         Err(s) => return Err(s),
     };
 
@@ -140,7 +161,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let mut peek: [u8; 4] = [0; 4];
     let mut received: u64 = 0;
     let mut data = Vec::<u8>::new();
-    data.resize(5120, 0);
+    data.resize(chunk_size as usize, 0);
     loop {
         // Read from network connection
         stream.peek(&mut peek)?;
@@ -164,6 +185,9 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         let mut chunk = TeleportData::new();
         chunk.deserialize(data_slice)?;
 
+        // Seek to offset
+        file.seek(SeekFrom::Start(chunk.offset))?;
+
         // Write received data to file
         let wrote = match file.write(&chunk.data) {
             Ok(w) => w,
@@ -173,7 +197,6 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         };
 
         if chunk.length as usize != wrote {
-            println!("{:?}", chunk);
             println!(
                 "Error writing to file: {} (read: {}, wrote: {}). Out of space?",
                 &header.filename, chunk.length, wrote
@@ -181,6 +204,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
             break;
         }
 
+        received = chunk.offset;
         received += chunk.length as u64;
 
         if received > header.filesize {

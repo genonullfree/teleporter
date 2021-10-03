@@ -56,6 +56,77 @@ fn identify_unit(mut value: f64) -> SizeUnit {
     }
 }
 
+pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
+    let mut hasher = blake3::Hasher::new();
+    let mut buf = Vec::<u8>::new();
+    buf.resize(4096, 0);
+
+    let mut file = File::open(filename)?;
+
+    file.seek(SeekFrom::Start(0))?;
+
+    loop {
+        // Read a chunk of the file
+        let len = match file.read(&mut buf) {
+            Ok(l) => l,
+            Err(s) => return Err(s),
+        };
+        if len == 0 {
+            break;
+        }
+
+        hasher.update(&buf);
+    }
+
+    file.seek(SeekFrom::Start(0))?;
+
+    Ok(hasher.finalize())
+}
+
+pub fn calc_delta_hash(mut file: &File, delta_size: u64) -> Result<TeleportDelta, Error> {
+    let meta = file.metadata()?;
+    let file_size = meta.len();
+
+    let chunk_size = if delta_size > 0 {
+        delta_size
+    } else {
+        file_size / 256 // TODO: Optimize this value
+    };
+
+    file.seek(SeekFrom::Start(0))?;
+    let mut buf = Vec::<u8>::new();
+    buf.resize(chunk_size as usize, 0);
+    let mut hasher = blake3::Hasher::new();
+    let mut whole_hasher = blake3::Hasher::new();
+    let mut delta_csum = Vec::<Hash>::new();
+
+    loop {
+        // Read a chunk of the file
+        let len = match file.read(&mut buf) {
+            Ok(l) => l,
+            Err(s) => return Err(s),
+        };
+        if len == 0 {
+            break;
+        }
+
+        hasher.update(&buf);
+        delta_csum.push(hasher.finalize());
+        hasher.reset();
+
+        whole_hasher.update(&buf);
+    }
+
+    let out = TeleportDelta {
+        size: file_size as u64,
+        delta_size: chunk_size as u64,
+        csum: whole_hasher.finalize(),
+        delta_csum,
+    };
+
+    Ok(out)
+}
+
 impl TeleportInit {
     pub fn new() -> TeleportInit {
         TeleportInit {
@@ -202,13 +273,12 @@ impl TryFrom<u8> for TeleportInitStatus {
     }
 }
 
-//impl TryFrom<u8> for TeleportDataStatus
-
 impl TeleportInitAck {
     pub fn new(status: TeleportInitStatus) -> TeleportInitAck {
         TeleportInitAck {
             ack: status,
             version: VERSION.to_string(),
+            delta: None,
         }
     }
 
@@ -216,9 +286,48 @@ impl TeleportInitAck {
         let mut out = vec![self.ack as u8];
         out.append(&mut self.version.clone().into_bytes());
         out.push(0);
+        match &self.delta {
+            Some(d) => {
+                out.append(&mut d.size.to_le_bytes().to_vec());
+                out.append(&mut d.delta_size.to_le_bytes().to_vec());
+                out.append(&mut d.csum.as_bytes().to_vec());
+                out.append(&mut TeleportInitAck::csum_serial(&d.delta_csum));
+            }
+            None => {}
+        };
         let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
         out.push(csum);
         out
+    }
+
+    fn csum_serial(input: &[Hash]) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+
+        for i in input {
+            out.append(&mut i.as_bytes().to_vec());
+        }
+
+        out
+    }
+
+    fn csum_deserial(input: &[u8]) -> Result<Vec<Hash>, Error> {
+        if input.len() % 32 != 0 {
+            println!("input.len(): {}", input.len());
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Cannot deserialize Vec<Hash>",
+            ));
+        }
+
+        let mut out = Vec::<Hash>::new();
+
+        for i in input.chunks(32) {
+            let a: [u8; 32] = i.try_into().unwrap();
+            let h: Hash = a.try_into().unwrap();
+            out.push(h);
+        }
+
+        Ok(out)
     }
 
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
@@ -226,9 +335,26 @@ impl TeleportInitAck {
         let size = input.len();
         self.ack = buf.read_u8().unwrap().try_into().unwrap();
         self.version = TeleportInit::vec_to_string(&input[1..]);
+        if size > self.version.len() + 3 {
+            buf = &input[self.version.len() + 2..];
+            let c: [u8; 32] = input[self.version.len() + 2 + 16..self.version.len() + 2 + 16 + 32]
+                .try_into()
+                .unwrap();
+            self.delta = Some(TeleportDelta {
+                size: buf.read_u64::<LittleEndian>().unwrap(),
+                delta_size: buf.read_u64::<LittleEndian>().unwrap(),
+                csum: c.try_into().unwrap(),
+                delta_csum: TeleportInitAck::csum_deserial(
+                    &input[self.version.len() + 2 + 16 + 32..size - 1],
+                )?,
+            });
+        } else {
+            self.delta = None;
+        }
         let csumr = input[size - 1];
-        let csum: u8 = input[..size - 2].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
+            println!("len: {} expected: {} received: {}", size, csum, csumr);
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "TeleportInitAck checksum is invalid",
@@ -238,36 +364,6 @@ impl TeleportInitAck {
         Ok(())
     }
 }
-
-/*impl TeleportDataAck {
-    pub fn new(status: TeleportDataStatus) -> TeleportDataAck {
-        TeleportDataAck { ack: status }
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut out = vec![self.ack as u8];
-        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
-        out.push(csum);
-
-        out
-    }
-
-    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
-        let mut buf: &[u8] = &input;
-        let size = input.len();
-        self.ack = buf.read_u8().unwrap().try_into().unwrap();
-        let csumr = input[size - 1];
-        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
-        if csum != csumr {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "TeleportDataAck checksum is invalid",
-            ));
-        }
-
-        Ok(())
-    }
-}*/
 
 impl Default for TeleportData {
     fn default() -> Self {
@@ -390,6 +486,7 @@ mod tests {
         let test = TeleportInitAck {
             ack: TeleportInitStatus::WrongVersion,
             version: "0.2.3".to_string(),
+            delta: None,
         };
 
         te.deserialize(TESTINITACK.to_vec()).unwrap();
