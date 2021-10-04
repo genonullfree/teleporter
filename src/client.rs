@@ -70,6 +70,9 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             }
         };
 
+        let thread_file = filepath.clone().to_string();
+        let handle = thread::spawn(move || utils::calc_file_hash(thread_file).unwrap());
+
         // Remove '/' root if exists
         if filepath.starts_with('/') {
             filename.remove(0);
@@ -115,7 +118,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
         // Send header first
         match stream.write(&header.serialize()) {
-            Ok(_) => true,
+            Ok(_) => {}
             Err(s) => return Err(s),
         };
 
@@ -129,7 +132,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         // Validate response
-        match recv.ack {
+        match &recv.ack {
             TeleportInitStatus::Overwrite => {
                 println!("The server is overwriting the file: {}", &header.filename)
             }
@@ -164,11 +167,19 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             _ => (),
         };
 
-        // Send file data
-        match send(stream, file, header) {
-            Ok(_) => true,
-            Err(s) => return Err(s),
-        };
+        let csum_recv = recv.delta.as_ref().map(|r| r.csum);
+        let checksum = Some(handle.join().expect("calc_file_hash panicked"));
+
+        if checksum == csum_recv {
+            // File matches hash
+            send_delta_complete(stream, file)?;
+        } else {
+            // Send file data
+            match send(stream, file, header, recv.delta) {
+                Ok(_) => {}
+                Err(s) => return Err(s),
+            };
+        }
 
         println!(" done!");
     }
@@ -176,7 +187,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 }
 
 fn recv_ack(mut stream: &TcpStream) -> Option<TeleportInitAck> {
-    let mut buf: [u8; 4096] = [0; 4096];
+    let mut buf: [u8; 4096 * 3] = [0; 4096 * 3];
 
     // Receive ACK that the server is ready for data
     let len = match stream.read(&mut buf) {
@@ -187,16 +198,58 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportInitAck> {
     let fix = &buf[..len];
     let mut resp = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
     match resp.deserialize(fix.to_vec()) {
-        Ok(_) => true,
-        Err(_) => return None,
+        Ok(_) => {}
+        Err(s) => {
+            println!("{:?}", s);
+            return None;
+        }
     };
 
     Some(resp)
 }
 
+fn send_delta_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
+    let meta = match file.metadata() {
+        Ok(m) => m,
+        Err(s) => return Err(s),
+    };
+
+    let chunk = TeleportData {
+        length: 0,
+        offset: meta.len() as u64,
+        data: Vec::<u8>::new(),
+    };
+
+    // Send the data chunk
+    match stream.write_all(&chunk.serialize()) {
+        Ok(_) => {}
+        Err(s) => return Err(s),
+    };
+    match stream.flush() {
+        Ok(_) => {}
+        Err(s) => return Err(s),
+    };
+
+    Ok(())
+}
+
 /// Send function receives the ACK for data and sends the file data
-fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(), Error> {
-    let mut buf: [u8; 4096] = [0; 4096];
+fn send(
+    mut stream: TcpStream,
+    mut file: File,
+    header: TeleportInit,
+    delta: Option<TeleportDelta>,
+) -> Result<(), Error> {
+    let mut buf = Vec::<u8>::new();
+    let mut hash_list = Vec::<Hash>::new();
+    let mut hasher = blake3::Hasher::new();
+    match delta {
+        Some(d) => {
+            buf.resize(d.delta_size as usize, 0);
+            hash_list = d.delta_csum;
+        }
+        None => buf.resize(4096, 0),
+    }
 
     // Send file data
     let mut sent = 0;
@@ -212,15 +265,37 @@ fn send(mut stream: TcpStream, mut file: File, header: TeleportInit) -> Result<(
             break;
         }
 
+        // Check if hash matches, if so: skip chunk
+        let index = sent / buf.len();
+        if !hash_list.is_empty() && index < hash_list.len() {
+            hasher.update(&buf);
+            if (index == hash_list.len() - 1) && sent + len == header.filesize as usize {
+                send_delta_complete(stream, file)?;
+                sent += len;
+                print_updates(sent as f64, &header);
+                break;
+            }
+            if hash_list[index] == hasher.finalize() {
+                sent += len;
+                continue;
+            }
+            hasher.reset();
+        }
+
         let data = &buf[..len];
+        let chunk = TeleportData {
+            length: len as u32,
+            offset: sent as u64,
+            data: data.to_vec(),
+        };
 
         // Send the data chunk
-        match stream.write_all(data) {
-            Ok(_) => true,
+        match stream.write_all(&chunk.serialize()) {
+            Ok(_) => {}
             Err(s) => return Err(s),
         };
         match stream.flush() {
-            Ok(_) => true,
+            Ok(_) => {}
             Err(s) => return Err(s),
         };
 

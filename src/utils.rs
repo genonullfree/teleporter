@@ -56,6 +56,77 @@ fn identify_unit(mut value: f64) -> SizeUnit {
     }
 }
 
+pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
+    let mut hasher = blake3::Hasher::new();
+    let mut buf = Vec::<u8>::new();
+    buf.resize(4096, 0);
+
+    let mut file = File::open(filename)?;
+
+    file.seek(SeekFrom::Start(0))?;
+
+    loop {
+        // Read a chunk of the file
+        let len = match file.read(&mut buf) {
+            Ok(l) => l,
+            Err(s) => return Err(s),
+        };
+        if len == 0 {
+            break;
+        }
+
+        hasher.update(&buf);
+    }
+
+    file.seek(SeekFrom::Start(0))?;
+
+    Ok(hasher.finalize())
+}
+
+pub fn calc_delta_hash(mut file: &File, delta_size: u64) -> Result<TeleportDelta, Error> {
+    let meta = file.metadata()?;
+    let file_size = meta.len();
+
+    let chunk_size = if delta_size > 0 {
+        delta_size
+    } else {
+        file_size / 256 // TODO: Optimize this value
+    };
+
+    file.seek(SeekFrom::Start(0))?;
+    let mut buf = Vec::<u8>::new();
+    buf.resize(chunk_size as usize, 0);
+    let mut hasher = blake3::Hasher::new();
+    let mut whole_hasher = blake3::Hasher::new();
+    let mut delta_csum = Vec::<Hash>::new();
+
+    loop {
+        // Read a chunk of the file
+        let len = match file.read(&mut buf) {
+            Ok(l) => l,
+            Err(s) => return Err(s),
+        };
+        if len == 0 {
+            break;
+        }
+
+        hasher.update(&buf);
+        delta_csum.push(hasher.finalize());
+        hasher.reset();
+
+        whole_hasher.update(&buf);
+    }
+
+    let out = TeleportDelta {
+        size: file_size as u64,
+        delta_size: chunk_size as u64,
+        csum: whole_hasher.finalize(),
+        delta_csum,
+    };
+
+    Ok(out)
+}
+
 impl TeleportInit {
     pub fn new() -> TeleportInit {
         TeleportInit {
@@ -154,7 +225,10 @@ impl TeleportInit {
         let csumr = buf.read_u8().unwrap();
         let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
-            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportInit checksum is invalid",
+            ));
         }
         Ok(())
     }
@@ -204,6 +278,7 @@ impl TeleportInitAck {
         TeleportInitAck {
             ack: status,
             version: VERSION.to_string(),
+            delta: None,
         }
     }
 
@@ -211,9 +286,48 @@ impl TeleportInitAck {
         let mut out = vec![self.ack as u8];
         out.append(&mut self.version.clone().into_bytes());
         out.push(0);
+        match &self.delta {
+            Some(d) => {
+                out.append(&mut d.size.to_le_bytes().to_vec());
+                out.append(&mut d.delta_size.to_le_bytes().to_vec());
+                out.append(&mut d.csum.as_bytes().to_vec());
+                out.append(&mut TeleportInitAck::csum_serial(&d.delta_csum));
+            }
+            None => {}
+        };
         let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
         out.push(csum);
         out
+    }
+
+    fn csum_serial(input: &[Hash]) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+
+        for i in input {
+            out.append(&mut i.as_bytes().to_vec());
+        }
+
+        out
+    }
+
+    fn csum_deserial(input: &[u8]) -> Result<Vec<Hash>, Error> {
+        if input.len() % 32 != 0 {
+            println!("input.len(): {}", input.len());
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Cannot deserialize Vec<Hash>",
+            ));
+        }
+
+        let mut out = Vec::<Hash>::new();
+
+        for i in input.chunks(32) {
+            let a: [u8; 32] = i.try_into().unwrap();
+            let h: Hash = a.try_into().unwrap();
+            out.push(h);
+        }
+
+        Ok(out)
     }
 
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
@@ -221,10 +335,82 @@ impl TeleportInitAck {
         let size = input.len();
         self.ack = buf.read_u8().unwrap().try_into().unwrap();
         self.version = TeleportInit::vec_to_string(&input[1..]);
+        if size > self.version.len() + 3 {
+            buf = &input[self.version.len() + 2..];
+            let c: [u8; 32] = input[self.version.len() + 2 + 16..self.version.len() + 2 + 16 + 32]
+                .try_into()
+                .unwrap();
+            self.delta = Some(TeleportDelta {
+                size: buf.read_u64::<LittleEndian>().unwrap(),
+                delta_size: buf.read_u64::<LittleEndian>().unwrap(),
+                csum: c.try_into().unwrap(),
+                delta_csum: TeleportInitAck::csum_deserial(
+                    &input[self.version.len() + 2 + 16 + 32..size - 1],
+                )?,
+            });
+        } else {
+            self.delta = None;
+        }
         let csumr = input[size - 1];
-        let csum: u8 = input[..size - 2].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
-            return Err(Error::new(ErrorKind::InvalidData, "Checksum is invalid"));
+            println!("len: {} expected: {} received: {}", size, csum, csumr);
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportInitAck checksum is invalid",
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+impl Default for TeleportData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TeleportData {
+    pub fn new() -> TeleportData {
+        TeleportData {
+            length: 0,
+            offset: 0,
+            data: vec![],
+        }
+    }
+
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+        let len: u32 = self.data.len() as u32;
+        out.append(&mut len.to_le_bytes().to_vec());
+        out.append(&mut self.offset.to_le_bytes().to_vec());
+        out.append(&mut self.data.clone());
+        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
+        out.push(csum);
+        out
+    }
+
+    pub fn size(&self) -> usize {
+        self.data.len() + 4 + 8
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        let size = input.len();
+        let mut buf: &[u8] = input;
+        self.length = buf.read_u32::<LittleEndian>().unwrap();
+        self.offset = buf.read_u64::<LittleEndian>().unwrap();
+        self.data = input[12..size - 1].to_vec();
+        let csumr = input[size - 1];
+        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
+        if csum != csumr {
+            println!("data: {:?}", self.data);
+            println!("\nlength: {} offset: {}", self.length, self.offset);
+            println!("expected: {}, received: {}", csum, csumr);
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportData checksum is invalid",
+            ));
         }
 
         Ok(())
@@ -234,6 +420,14 @@ impl TeleportInitAck {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TESTINIT: &[u8] = &[
+        62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115, 116,
+        102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0, 0, 0, 0,
+        41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
+    ];
+    const TESTINITACK: &[u8] = &[5, 48, 46, 50, 46, 51, 0, 246];
+    const TESTDATA: &[u8] = &[4, 0, 0, 0, 184, 34, 0, 0, 0, 0, 0, 0, 10, 10, 32, 3, 21];
 
     #[test]
     fn test_update_unit() {
@@ -257,12 +451,7 @@ mod tests {
             overwrite: true,
         };
         let s = t.serialize();
-        let test = [
-            62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115,
-            116, 102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0,
-            0, 0, 0, 41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
-        ];
-        assert_eq!(s, test);
+        assert_eq!(s, TESTINIT);
     }
 
     #[test]
@@ -277,37 +466,54 @@ mod tests {
             chmod: 00755,
             overwrite: true,
         };
-        let test = [
-            62, 0, 0, 0, 84, 69, 76, 69, 80, 79, 82, 84, 0, 48, 46, 50, 46, 50, 0, 116, 101, 115,
-            116, 102, 105, 108, 101, 46, 98, 105, 110, 0, 1, 0, 0, 0, 0, 0, 0, 0, 231, 3, 0, 0, 0,
-            0, 0, 0, 41, 35, 0, 0, 0, 0, 0, 0, 243, 2, 0, 0, 1, 145,
-        ];
         let mut te = TeleportInit::new();
-        te.deserialize(test.to_vec()).unwrap();
+        te.deserialize(TESTINIT.to_vec()).unwrap();
         assert_eq!(te, t);
     }
 
     #[test]
-    fn test_teleportresponse_serialize() {
+    fn test_teleportinitack_serialize() {
         let mut t = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
         t.version = "0.2.3".to_string();
         let te = t.serialize();
-        let test = [5, 48, 46, 50, 46, 51, 0, 246];
 
-        assert_eq!(te, test);
+        assert_eq!(te, TESTINITACK);
     }
 
     #[test]
-    fn test_teleportresponse_deserialize() {
-        let t = [5, 48, 46, 50, 46, 51, 0, 246];
+    fn test_teleportinitack_deserialize() {
         let mut te = TeleportInitAck::new(TeleportInitStatus::Proceed);
         let test = TeleportInitAck {
             ack: TeleportInitStatus::WrongVersion,
             version: "0.2.3".to_string(),
+            delta: None,
         };
 
-        te.deserialize(t.to_vec()).unwrap();
+        te.deserialize(TESTINITACK.to_vec()).unwrap();
         te.version = "0.2.3".to_string();
         assert_eq!(test, te);
+    }
+
+    #[test]
+    fn test_teleportdata_serialize() {
+        let t = TeleportData {
+            length: 4,
+            offset: 8888,
+            data: vec![0x0a, 0x0a, 0x20, 0x03],
+        }
+        .serialize();
+        assert_eq!(t, TESTDATA);
+    }
+
+    #[test]
+    fn test_teleportdata_deserialize() {
+        let mut t = TeleportData::new();
+        t.deserialize(TESTDATA).unwrap();
+        let test = TeleportData {
+            length: 4,
+            offset: 8888,
+            data: vec![0x0a, 0x0a, 0x20, 0x03],
+        };
+        assert_eq!(t, test);
     }
 }
