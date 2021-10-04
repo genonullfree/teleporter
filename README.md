@@ -4,6 +4,10 @@ Teleport is a small utility in the vein of netcat to send files quickly from poi
 
 Teleport lets you pass the destination and a list of files you wish to send and it will create those files with the proper filenames on the receiving end. Each Teleport binary can act as a client or a server so there's no need to move multiple software packages around.
 
+Teleport can recursively copy files as well, just pass a directory name and it will copy files all the way down.
+
+Teleport now does delta file transfers using the Blake3 hashing algorithm for files being overwritten that are larger than 1Mb. Testing has shown this to increase speedup for large files by about half.
+
 # Usage
 ```
 Teleport is a simple application for sending files from Point A to Point B
