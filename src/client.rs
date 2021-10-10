@@ -28,7 +28,6 @@ fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
     let mut files = Vec::<String>::new();
 
     for entry in path.read_dir().unwrap() {
-        println!("files: {:?}", &files);
         if entry.as_ref().unwrap().file_type().unwrap().is_dir() {
             if entry.as_ref().unwrap().path() == *dir {
                 continue;
@@ -55,6 +54,11 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     println!("Teleport Client {}", VERSION);
 
     let files = get_file_list(&opt);
+
+    if files.is_empty() {
+        println!(" => No files to send. (Did you mean to add '-r'?)");
+        return Ok(());
+    }
 
     // For each filepath in the input vector...
     for (num, item) in files.iter().enumerate() {
