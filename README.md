@@ -18,6 +18,7 @@ USAGE:
 FLAGS:
     -h, --help         Prints help information
     -o, --overwrite    Overwrite remote file
+    -r, --recursive    Recurse into directories on send
     -V, --version      Prints version information
 
 OPTIONS:

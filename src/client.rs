@@ -6,7 +6,7 @@ fn get_file_list(opt: &Opt) -> Vec<String> {
     let mut files = Vec::<String>::new();
 
     for item in opt.input.iter() {
-        if item.is_dir() {
+        if opt.recursive && item.is_dir() {
             let mut tmp = match scope_dir(&item.to_path_buf()) {
                 Ok(t) => t,
                 Err(_) => {
@@ -74,8 +74,15 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         let handle = thread::spawn(move || utils::calc_file_hash(thread_file).unwrap());
 
         // Remove '/' root if exists
-        if filepath.starts_with('/') {
+        if opt.recursive && filepath.starts_with('/') {
             filename.remove(0);
+        } else if !opt.recursive {
+            filename = Path::new(item)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
         }
 
         let meta = match file.metadata() {
