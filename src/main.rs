@@ -35,6 +35,10 @@ pub struct Opt {
     /// Overwrite remote file
     #[structopt(short, long)]
     overwrite: bool,
+
+    /// Recurse into directories on send
+    #[structopt(short, long)]
+    recursive: bool,
 }
 
 const PROTOCOL: &str = "TELEPORT";
