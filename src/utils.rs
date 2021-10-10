@@ -89,8 +89,10 @@ pub fn calc_delta_hash(mut file: &File, delta_size: u64) -> Result<TeleportDelta
 
     let chunk_size = if delta_size > 0 {
         delta_size
+    } else if (file_size / 256) < 100 {
+        1024
     } else {
-        file_size / 256 // TODO: Optimize this value
+        file_size / 256
     };
 
     file.seek(SeekFrom::Start(0))?;
@@ -123,6 +125,8 @@ pub fn calc_delta_hash(mut file: &File, delta_size: u64) -> Result<TeleportDelta
         csum: whole_hasher.finalize(),
         delta_csum,
     };
+
+    file.seek(SeekFrom::Start(0))?;
 
     Ok(out)
 }
@@ -312,7 +316,6 @@ impl TeleportInitAck {
 
     fn csum_deserial(input: &[u8]) -> Result<Vec<Hash>, Error> {
         if input.len() % 32 != 0 {
-            println!("input.len(): {}", input.len());
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "Cannot deserialize Vec<Hash>",
@@ -404,9 +407,6 @@ impl TeleportData {
         let csumr = input[size - 1];
         let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
         if csum != csumr {
-            println!("data: {:?}", self.data);
-            println!("\nlength: {} offset: {}", self.length, self.offset);
-            println!("expected: {}, received: {}", csum, csumr);
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "TeleportData checksum is invalid",
