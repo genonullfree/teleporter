@@ -42,10 +42,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 fn send_ack(ack: TeleportInitAck, mut stream: &TcpStream) -> Result<(), Error> {
     // Encode and send response
     let serial_resp = ack.serialize();
-    match stream.write(&serial_resp) {
-        Ok(_) => {}
-        Err(s) => return Err(s),
-    };
+    stream.write(&serial_resp)?;
 
     Ok(())
 }
@@ -65,14 +62,11 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let len = stream.read(&mut name_buf)?;
     let fix = &name_buf[..len];
     let mut header = TeleportInit::new();
-    match header.deserialize(fix.to_vec()) {
-        Ok(_) => {}
-        Err(_) => {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Data received did not match expected",
-            ))
-        }
+    if header.deserialize(fix.to_vec()).is_err() {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Data received did not match expected",
+        ));
     };
 
     if header.protocol != *PROTOCOL || header.version != *VERSION {
@@ -92,13 +86,10 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     }
 
     // Create recursive dirs
-    match fs::create_dir_all(Path::new(&header.filename).parent().unwrap()) {
-        Ok(_) => {}
-        Err(_) => {
-            println!("Error: unable to create directories: {}", &header.filename);
-            let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
-            return send_ack(resp, &stream);
-        }
+    if fs::create_dir_all(Path::new(&header.filename).parent().unwrap()).is_err() {
+        println!("Error: unable to create directories: {}", &header.filename);
+        let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
+        return send_ack(resp, &stream);
     };
 
     // Open file for writing
@@ -117,19 +108,13 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
             }
         },
     };
-    let meta = match file.metadata() {
-        Ok(m) => m,
-        Err(s) => return Err(s),
-    };
+    let meta = file.metadata()?;
     let mut perms = meta.permissions();
     perms.set_mode(header.chmod);
-    match fs::set_permissions(&header.filename, perms) {
-        Ok(_) => {}
-        Err(_) => {
-            println!("Could not set file permissions");
-            let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
-            return send_ack(resp, &stream);
-        }
+    if fs::set_permissions(&header.filename, perms).is_err() {
+        println!("Could not set file permissions");
+        let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
+        return send_ack(resp, &stream);
     };
 
     // Send ready for data ACK
@@ -147,10 +132,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         };
     }
 
-    match send_ack(resp, &stream) {
-        Ok(_) => {}
-        Err(s) => return Err(s),
-    };
+    send_ack(resp, &stream)?;
 
     let mut recv_data = recv_list.lock().unwrap();
     recv_data.push(header.filename.clone());
@@ -189,12 +171,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         file.seek(SeekFrom::Start(chunk.offset))?;
 
         // Write received data to file
-        let wrote = match file.write(&chunk.data) {
-            Ok(w) => w,
-            Err(s) => {
-                return Err(s);
-            }
-        };
+        let wrote = file.write(&chunk.data)?;
 
         if chunk.length as usize != wrote {
             println!(

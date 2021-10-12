@@ -89,10 +89,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
                 .to_string();
         }
 
-        let meta = match file.metadata() {
-            Ok(m) => m,
-            Err(s) => return Err(s),
-        };
+        let meta = file.metadata()?;
         let header = TeleportInit {
             protocol: PROTOCOL.to_string(),
             version: VERSION.to_string(),
@@ -128,10 +125,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         );
 
         // Send header first
-        match stream.write(&header.serialize()) {
-            Ok(_) => {}
-            Err(s) => return Err(s),
-        };
+        stream.write(&header.serialize())?;
 
         // Receive response from server
         let recv = match recv_ack(&stream) {
@@ -186,10 +180,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             send_delta_complete(stream, file)?;
         } else {
             // Send file data
-            match send(stream, file, header, recv.delta) {
-                Ok(_) => {}
-                Err(s) => return Err(s),
-            };
+            send(stream, file, header, recv.delta)?;
         }
 
         println!(" done!");
@@ -208,22 +199,16 @@ fn recv_ack(mut stream: &TcpStream) -> Option<TeleportInitAck> {
 
     let fix = &buf[..len];
     let mut resp = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
-    match resp.deserialize(fix.to_vec()) {
-        Ok(_) => {}
-        Err(s) => {
-            println!("{:?}", s);
-            return None;
-        }
+    if let Err(e) = resp.deserialize(fix.to_vec()) {
+        println!("{:?}", e);
+        return None;
     };
 
     Some(resp)
 }
 
 fn send_delta_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
-    let meta = match file.metadata() {
-        Ok(m) => m,
-        Err(s) => return Err(s),
-    };
+    let meta = file.metadata()?;
 
     let chunk = TeleportData {
         length: 0,
@@ -232,14 +217,8 @@ fn send_delta_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
     };
 
     // Send the data chunk
-    match stream.write_all(&chunk.serialize()) {
-        Ok(_) => {}
-        Err(s) => return Err(s),
-    };
-    match stream.flush() {
-        Ok(_) => {}
-        Err(s) => return Err(s),
-    };
+    stream.write_all(&chunk.serialize())?;
+    stream.flush()?;
 
     Ok(())
 }
