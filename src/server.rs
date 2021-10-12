@@ -42,7 +42,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 fn send_ack(ack: TeleportInitAck, mut stream: &TcpStream) -> Result<(), Error> {
     // Encode and send response
     let serial_resp = ack.serialize();
-    stream.write(&serial_resp)?;
+    stream.write_all(&serial_resp)?;
 
     Ok(())
 }
@@ -123,7 +123,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     // If overwrite and file exists, build TeleportDelta
     let mut chunk_size = 5120;
     if meta.len() > 0 {
-        resp.delta = match utils::calc_delta_hash(&file, 0) {
+        resp.delta = match utils::calc_delta_hash(&file) {
             Ok(d) => {
                 chunk_size = d.delta_size + 1024;
                 Some(d)

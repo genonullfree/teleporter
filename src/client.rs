@@ -125,7 +125,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         );
 
         // Send header first
-        stream.write(&header.serialize())?;
+        stream.write_all(&header.serialize())?;
 
         // Receive response from server
         let recv = match recv_ack(&stream) {

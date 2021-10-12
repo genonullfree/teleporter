@@ -56,12 +56,27 @@ fn identify_unit(mut value: f64) -> SizeUnit {
     }
 }
 
+fn gen_chunk_size(file_size: u64) -> usize {
+    let mut chunk = 1024;
+    loop {
+        if file_size / chunk > 150 {
+            chunk *= 2;
+        } else {
+            break;
+        }
+    }
+
+    chunk as usize
+}
+
 pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
     let mut hasher = blake3::Hasher::new();
     let mut buf = Vec::<u8>::new();
-    buf.resize(4096, 0);
 
     let mut file = File::open(filename)?;
+    let meta = file.metadata()?;
+
+    buf.resize(gen_chunk_size(meta.len()), 0);
 
     file.seek(SeekFrom::Start(0))?;
 
@@ -83,21 +98,13 @@ pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
     Ok(hasher.finalize())
 }
 
-pub fn calc_delta_hash(mut file: &File, delta_size: u64) -> Result<TeleportDelta, Error> {
+pub fn calc_delta_hash(mut file: &File) -> Result<TeleportDelta, Error> {
     let meta = file.metadata()?;
     let file_size = meta.len();
 
-    let chunk_size = if delta_size > 0 {
-        delta_size
-    } else if (file_size / 256) < 100 {
-        1024
-    } else {
-        file_size / 256
-    };
-
     file.seek(SeekFrom::Start(0))?;
     let mut buf = Vec::<u8>::new();
-    buf.resize(chunk_size as usize, 0);
+    buf.resize(gen_chunk_size(meta.len()), 0);
     let mut hasher = blake3::Hasher::new();
     let mut whole_hasher = blake3::Hasher::new();
     let mut delta_csum = Vec::<Hash>::new();
@@ -121,7 +128,7 @@ pub fn calc_delta_hash(mut file: &File, delta_size: u64) -> Result<TeleportDelta
 
     let out = TeleportDelta {
         size: file_size as u64,
-        delta_size: chunk_size as u64,
+        delta_size: buf.len() as u64,
         csum: whole_hasher.finalize(),
         delta_csum,
     };
