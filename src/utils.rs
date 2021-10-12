@@ -57,11 +57,16 @@ fn identify_unit(mut value: f64) -> SizeUnit {
 }
 
 fn gen_chunk_size(file_size: u64) -> usize {
-    if (file_size as usize / 100) < 1024 {
-        1024 * 1024
-    } else {
-        file_size as usize / 100
+    let mut chunk = 1024;
+    loop {
+        if file_size / chunk > 150 {
+            chunk *= 2;
+        } else {
+            break;
+        }
     }
+
+    chunk as usize
 }
 
 pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
