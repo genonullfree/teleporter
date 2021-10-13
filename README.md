@@ -48,7 +48,7 @@ Teleporter will transfer files with their name information as well as their file
 
 If you have Rust and Cargo installed, Teleporter can be quickly compiled and installed by running the following command:
 ```
-cargo install teleporterer
+cargo install teleporter
 ```
 This will install Teleporter to `~/.cargo/bin/teleporter`, which might need to be added to your shell's `PATH` variable.
 
