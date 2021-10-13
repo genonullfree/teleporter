@@ -6,7 +6,7 @@ Teleport lets you pass the destination and a list of files you wish to send and 
 
 Teleport can recursively copy files as well, just pass a directory name and it will copy files all the way down.
 
-Teleport now does delta file transfers using the Blake3 hashing algorithm for files being overwritten that are larger than 1Mb. Testing has shown this to increase speedup for large files by about half.
+Teleport now does delta file transfers using the Blake3 hashing algorithm for files being overwritten.
 
 # Usage
 ```
@@ -44,6 +44,14 @@ To start a teleport in client (sending) mode, run:
 
 Teleport will transfer files with their name information as well as their file permissions. Any file path information will be lost. All the received files will be written out in the CWD where the server side was started.
 
+# Installation
+
+If you have Rust and Cargo installed, Teleport can be quickly compiled and installed by running the following command:
+```
+cargo install --git https://github.com/genonullfree/teleport.git
+```
+This will install Teleport to `~/.cargo/bin/teleport`, which might need to be added to your shell's `PATH` variable.
+
 # Example output
 
 ## Server (receiving from 2 different clients)
@@ -75,7 +83,3 @@ Sending file 4/4: "testfile4"
  =>   20.000M of   20.000M (100.00%) done!
 
 ```
-
-# WIP Disclaimer
-
-Teleport is currently a work in progress. Use at your own risk.
