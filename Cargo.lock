@@ -226,7 +226,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "teleport"
+name = "teleporter"
 version = "0.4.3"
 dependencies = [
  "blake3",

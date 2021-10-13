@@ -16,7 +16,7 @@ mod client;
 mod server;
 mod utils;
 
-/// Teleport is a simple application for sending files from Point A to Point B
+/// Teleporter is a simple application for sending files from Point A to Point B
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {

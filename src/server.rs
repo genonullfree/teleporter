@@ -17,7 +17,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     };
 
     println!(
-        "Teleport Server {} listening for connections on 0.0.0.0:{}",
+        "Teleporter Server {} listening for connections on 0.0.0.0:{}",
         VERSION, &opt.port
     );
 
