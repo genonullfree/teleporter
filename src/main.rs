@@ -16,7 +16,7 @@ mod client;
 mod server;
 mod utils;
 
-/// Teleport is a simple application for sending files from Point A to Point B
+/// Teleporter is a simple application for sending files from Point A to Point B
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -24,11 +24,11 @@ pub struct Opt {
     #[structopt(short, long, parse(from_os_str), default_value = "")]
     input: Vec<PathBuf>,
 
-    /// Destination teleport IP address
+    /// Destination teleporter IP address
     #[structopt(short, long, default_value = "127.0.0.1")]
     dest: String,
 
-    /// Destination teleport Port, or Port to listen on
+    /// Destination teleporter Port, or Port to listen on
     #[structopt(short, long, default_value = "9001")]
     port: u16,
 

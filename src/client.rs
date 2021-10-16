@@ -51,7 +51,7 @@ fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
 
 /// Client function sends filename and file data for each filepath
 pub fn run(opt: Opt) -> Result<(), Error> {
-    println!("Teleport Client {}", VERSION);
+    println!("Teleporter Client {}", VERSION);
 
     let files = get_file_list(&opt);
 
