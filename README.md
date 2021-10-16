@@ -8,6 +8,8 @@ Teleporter can recursively copy files as well, just pass a directory name and it
 
 Teleporter now does delta file transfers using the Blake3 hashing algorithm for files being overwritten.
 
+The protocol Teleporter implements to transfer files is called Teleport.
+
 # Usage
 ```
 Teleporter is a simple application for sending files from Point A to Point B
