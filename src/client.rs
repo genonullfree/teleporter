@@ -75,7 +75,10 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         let thread_file = filepath.clone().to_string();
-        let handle = thread::spawn(move || utils::calc_file_hash(thread_file).unwrap());
+        let handle = match opt.overwrite {
+            true => Some(thread::spawn(move || utils::calc_file_hash(thread_file).unwrap())),
+            false => None,
+        };
 
         // Remove '/' root if exists
         if opt.recursive && filepath.starts_with('/') {
@@ -173,9 +176,13 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         let csum_recv = recv.delta.as_ref().map(|r| r.csum);
-        let checksum = Some(handle.join().expect("calc_file_hash panicked"));
 
-        if checksum == csum_recv {
+        let checksum = match handle {
+            Some(s) => Some(s.join().expect("calc_file_hash panicked")),
+            None => None,
+        };
+
+        if checksum != None && checksum == csum_recv {
             // File matches hash
             send_delta_complete(stream, file)?;
         } else {
