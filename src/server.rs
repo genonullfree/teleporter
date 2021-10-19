@@ -52,6 +52,29 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
     io::stdout().flush().unwrap();
 }
 
+fn compare_versions(recv: &str, have: &str) -> bool {
+    let mut ours = Vec::<&str>::new();
+    for i in recv.split('.') {
+        ours.push(i);
+    }
+
+    let _ = ours.pop();
+
+    let mut theirs = Vec::<&str>::new();
+    for i in have.split('.') {
+        theirs.push(i);
+    }
+
+    let _ = theirs.pop();
+
+    let same = ours
+        .iter()
+        .zip(theirs.iter())
+        .filter(|&(a, b)| a == b)
+        .count();
+    same == theirs.len() && same == ours.len()
+}
+
 /// Recv receives filenames and file data for a file
 fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(), Error> {
     let ip = stream.peer_addr().unwrap();
@@ -69,7 +92,9 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         ));
     };
 
-    if header.protocol != *PROTOCOL || header.version != *VERSION {
+    let compatible = compare_versions(&header.version, &VERSION.to_string());
+
+    if header.protocol != *PROTOCOL || !compatible {
         println!(
             "Error: Version mismatch from: {:?}! Us: {}:{} Client: {}:{}",
             ip, PROTOCOL, VERSION, header.protocol, header.version
@@ -157,7 +182,10 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
 
         if len == 0 {
             if received == header.filesize {
-                println!(" => Received file: {} from: {:?}", &header.filename, ip);
+                println!(
+                    " => Received file: {} (from: {:?} v{})",
+                    &header.filename, ip, &header.version
+                );
             } else {
                 println!(" => Error receiving: {}", &header.filename);
             }
