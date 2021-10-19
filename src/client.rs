@@ -76,7 +76,9 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
         let thread_file = filepath.clone().to_string();
         let handle = match opt.overwrite {
-            true => Some(thread::spawn(move || utils::calc_file_hash(thread_file).unwrap())),
+            true => Some(thread::spawn(move || {
+                utils::calc_file_hash(thread_file).unwrap()
+            })),
             false => None,
         };
 
@@ -176,11 +178,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         let csum_recv = recv.delta.as_ref().map(|r| r.csum);
-
-        let checksum = match handle {
-            Some(s) => Some(s.join().expect("calc_file_hash panicked")),
-            None => None,
-        };
+        let checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
 
         if checksum != None && checksum == csum_recv {
             // File matches hash
