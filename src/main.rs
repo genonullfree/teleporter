@@ -48,10 +48,10 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct TeleportInit {
     protocol: String,
     version: String,
+    filename: String,
     filenum: u64,
     totalfiles: u64,
     filesize: u64,
-    filename: String,
     chmod: u32,
     overwrite: bool,
 }
