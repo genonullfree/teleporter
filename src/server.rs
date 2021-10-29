@@ -147,7 +147,9 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
 
     // If overwrite and file exists, build TeleportDelta
     let mut chunk_size = 5120;
+    file.set_len(header.filesize)?;
     if meta.len() > 0 {
+        resp = TeleportInitAck::new(TeleportInitStatus::Overwrite);
         resp.delta = match utils::calc_delta_hash(&file) {
             Ok(d) => {
                 chunk_size = d.delta_size + 1024;
