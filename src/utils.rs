@@ -1,6 +1,5 @@
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
-use std::convert::{TryFrom, TryInto};
 
 struct SizeUnit {
     value: f64,
