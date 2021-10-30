@@ -78,11 +78,6 @@ pub struct TeleportData {
     data: Vec<u8>,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct TeleportDataAck {
-    ack: TeleportDataStatus,
-}
-
 /// TeleportInitStatus type when header is received and ready to receive file data or not
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TeleportInitStatus {
@@ -92,12 +87,6 @@ pub enum TeleportInitStatus {
     NoSpace,      // Error
     NoPermission, // Error
     WrongVersion, // Error
-}
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum TeleportDataStatus {
-    Success,
-    Error,
 }
 
 fn main() {
