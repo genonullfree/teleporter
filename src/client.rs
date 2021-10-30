@@ -264,12 +264,6 @@ fn send(
         let index = sent / buf.len();
         if !hash_list.is_empty() && index < hash_list.len() {
             hasher.update(&buf);
-            if (index == hash_list.len() - 1) && sent + len == header.filesize as usize {
-                send_delta_complete(stream, file)?;
-                sent += len;
-                print_updates(sent as f64, &header);
-                break;
-            }
             if hash_list[index] == hasher.finalize() {
                 sent += len;
                 continue;
@@ -297,6 +291,8 @@ fn send(
         sent += len;
         print_updates(sent as f64, &header);
     }
+
+    send_delta_complete(stream, file)?;
 
     Ok(())
 }
