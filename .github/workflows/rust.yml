@@ -10,35 +10,66 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-  
+  linux-check:
+    name: Build
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           override: true
-      
-      # Build and Test
-      - name: Build
-        run: cargo build --verbose
-      - name: Run tests
-        run: cargo test --verbose
-        
-      # Setup Rust compiler for release builds
-      - name: Setup Rust
-        uses: ATiltedTree/setup-rust@v1.0.4
+      - uses: actions-rs/cargo@v1
         with:
-          # The version to install
-          rust-version: 1.56.0
-          # The targets to install
-          targets: x86_64-unknown-linux-gnu
-      - name: Build (Release) linux-x86_64
-        run: cargo build --release --verbose --target x86_64-unknown-linux-gnu
-      - name: Upload linux-x86_64 release
-        uses: actions/upload-artifact@v2.2.4
+          command: build
+            
+  linux-test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+  linux-fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - run: rustup component add rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+  linux-release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: x86_64-unknown-linux-gnu
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - uses: actions/upload-artifact@v2.2.4
         with:
           name: teleporter-linux-x86_64
           path: target/x86_64-unknown-linux-gnu/release/teleporter
