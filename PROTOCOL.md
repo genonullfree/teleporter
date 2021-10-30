@@ -19,6 +19,7 @@ pub struct TeleportInit {
     filesize: u64,
     chmod: u32,
     overwrite: bool,
+    checksum: u8
 }
 ```
 
@@ -29,7 +30,8 @@ the file number of the current file in a batch of files and starts counting at `
 the number of files that will be sent together in the current batch and also starts counting at `1`.
 `filesize` is the size of the current file in bytes. `chmod` is the current file permissions to be
 applied to the file when it is received on the server side. `overwrite` is a boolean that indicates
-to the server if this file is to overwrite an existing file on the server, if it exists.
+to the server if this file is to overwrite an existing file on the server, if it exists. The
+`checksum` byte is a simple byte addition modulo `0xff` across the entire packet.
 
 The `TeleportInit` file is responded to with a `TeleportAck`, which has the following properties:
 ```rust
@@ -37,6 +39,7 @@ pub struct TeleportInitAck {
     ack: TeleportInitStatus,
     version: String,
     delta: Option<TeleportDelta>,
+    checksum: u8
 }
 ```
 
@@ -44,7 +47,8 @@ The values of `ack` are of the enumerated type `TeleportInitStatus`, which are d
 `version` string is NULL-terminated and is the current version of the server. Only the `major` and
 `minor` versions of the version string must match; the point release must not include protocol
 breaking changes. The optional `delta` field is included last and is described after
-`TeleportInitStatus`.
+`TeleportInitStatus`. The `checksum` byte is a simple byte addition modulo `0xff` across the entire
+packet.
 
 ```rust
 pub enum TeleportInitStatus {
@@ -91,27 +95,13 @@ pub struct TeleportData {
     length: u32,
     offset: u64,
     data: Vec<u8>,
+    checksum: u8
 }
 ```
 
 The `length` value is the size of the `data` vector in bytes. The `offset` value is the location in
 the file to begin writing the chunk to. The `data` vector is a vector of unsigned bytes of data that
-are the file data.
-
-Every `TeleportData` packet is responded to with a `TeleportDataAck` packet, defined as:
-```rust
-pub struct TeleportDataAck {
-    ack: TeleportDataStatus,
-}
-```
-
-`TeleportDataStatus` is an enumerated value with the values of:
-```rust
-pub enum TeleportDataStatus {
-    Success,
-    Error,
-}
-```
+are the file data. The `checksum` byte is a simple byte addition modulo `0xff` across the entire packet.
 
 Once the file is completely transferred the TCP connection is closed. If there is another file to
 transfer from the client, a new TCP connection is made.
