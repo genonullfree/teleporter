@@ -55,7 +55,7 @@ jobs:
           args: -- --check
 
   linux-release:
-    name: Release
+    name: Release Linux x86_64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -72,4 +72,24 @@ jobs:
       - uses: actions/upload-artifact@v2.2.4
         with:
           name: teleporter-linux-x86_64
+          path: target/release/teleporter
+
+  macos-release:
+    name: Release Darwin x86_64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: x86_64-apple-darwin 
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release
+      - uses: actions/upload-artifact@v2.2.4
+        with:
+          name: teleporter-darwin-x86_64
           path: target/release/teleporter
