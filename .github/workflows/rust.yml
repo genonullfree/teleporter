@@ -10,34 +10,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  linux-check:
-    name: Build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-            
-  linux-test:
-    name: Test Suite
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-
   linux-fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
@@ -54,8 +26,39 @@ jobs:
           command: fmt
           args: -- --check
 
+  linux-check:
+    name: Build
+    needs: linux-fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+  linux-test:
+    name: Linux Test Suite
+    needs: linux-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
   linux-release:
     name: Release Linux x86_64
+    needs: linux-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -74,8 +77,24 @@ jobs:
           name: teleporter-linux-x86_64
           path: target/release/teleporter
 
+  macos-test:
+    name: MacOS Test Suite
+    needs: linux-check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
   macos-release:
     name: Release Darwin x86_64
+    needs: macos-test
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
