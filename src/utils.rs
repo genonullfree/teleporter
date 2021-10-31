@@ -137,18 +137,27 @@ pub fn calc_delta_hash(mut file: &File) -> Result<TeleportDelta, Error> {
     Ok(out)
 }
 
-fn generate_checksum(input: &Vec<u8>) -> u8 {
+fn generate_checksum(input: &[u8]) -> u8 {
     input.iter().map(|x| *x as u64).sum::<u64>() as u8
 }
 
-fn validate_checksum(input: &Vec<u8>) -> Result<(), Error> {
+fn validate_checksum(input: &[u8]) -> Result<(), Error> {
     if input.len() < 2 {
-        return Err(Error::new(ErrorKind::InvalidData, "Vector is too short to validate checksum"));
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Vector is too short to validate checksum",
+        ));
     }
 
-    let csum: u8 = input[..input.len() - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
+    let csum: u8 = input[..input.len() - 1]
+        .iter()
+        .map(|x| *x as u64)
+        .sum::<u64>() as u8;
     if csum != *input.last().unwrap() {
-        return Err(Error::new(ErrorKind::InvalidData, "Teleport checksum is invalid"));
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Teleport checksum is invalid",
+        ));
     }
 
     Ok(())
@@ -513,5 +522,17 @@ mod tests {
             data: vec![0x0a, 0x0a, 0x20, 0x03],
         };
         assert_eq!(t, test);
+    }
+
+    #[test]
+    fn test_generate_checksum() {
+        let t = TESTINITACK[..TESTINITACK.len() - 1].to_vec();
+        let c = generate_checksum(&t);
+        assert_eq!(c, TESTINITACK[TESTINITACK.len() - 1]);
+    }
+
+    #[test]
+    fn test_validate_checksum() {
+        assert_eq!((), validate_checksum(&TESTINITACK.to_vec()).unwrap());
     }
 }
