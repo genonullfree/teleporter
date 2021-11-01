@@ -137,6 +137,32 @@ pub fn calc_delta_hash(mut file: &File) -> Result<TeleportDelta, Error> {
     Ok(out)
 }
 
+fn generate_checksum(input: &[u8]) -> u8 {
+    input.iter().map(|x| *x as u64).sum::<u64>() as u8
+}
+
+fn validate_checksum(input: &[u8]) -> Result<(), Error> {
+    if input.len() < 2 {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Vector is too short to validate checksum",
+        ));
+    }
+
+    let csum: u8 = input[..input.len() - 1]
+        .iter()
+        .map(|x| *x as u64)
+        .sum::<u64>() as u8;
+    if csum != *input.last().unwrap() {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Teleport checksum is invalid",
+        ));
+    }
+
+    Ok(())
+}
+
 impl TeleportInit {
     pub fn new() -> TeleportInit {
         TeleportInit {
@@ -167,8 +193,7 @@ impl TeleportInit {
         out.append(&mut self.chmod.to_le_bytes().to_vec());
         let bbyte = TeleportInit::bool_to_u8(self.overwrite);
         out.push(bbyte);
-        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
-        out.push(csum);
+        out.push(generate_checksum(&out));
         out
     }
 
@@ -211,6 +236,7 @@ impl TeleportInit {
     }
 
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
+        validate_checksum(&input)?;
         let mut buf: &[u8] = &input;
         let size = buf.read_u32::<LittleEndian>().unwrap() as usize;
         if input.len() < size {
@@ -232,14 +258,6 @@ impl TeleportInit {
         self.filesize = buf.read_u64::<LittleEndian>().unwrap();
         self.chmod = buf.read_u32::<LittleEndian>().unwrap();
         self.overwrite = buf.read_u8().unwrap() > 0;
-        let csumr = buf.read_u8().unwrap();
-        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
-        if csum != csumr {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "TeleportInit checksum is invalid",
-            ));
-        }
         Ok(())
     }
 }
@@ -305,8 +323,7 @@ impl TeleportInitAck {
             }
             None => {}
         };
-        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
-        out.push(csum);
+        out.push(generate_checksum(&out));
         out
     }
 
@@ -340,6 +357,7 @@ impl TeleportInitAck {
     }
 
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
+        validate_checksum(&input)?;
         let mut buf: &[u8] = &input;
         let size = input.len();
         self.ack = buf.read_u8().unwrap().try_into().unwrap();
@@ -359,15 +377,6 @@ impl TeleportInitAck {
             });
         } else {
             self.delta = None;
-        }
-        let csumr = input[size - 1];
-        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
-        if csum != csumr {
-            println!("len: {} expected: {} received: {}", size, csum, csumr);
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "TeleportInitAck checksum is invalid",
-            ));
         }
 
         Ok(())
@@ -395,8 +404,7 @@ impl TeleportData {
         out.append(&mut len.to_le_bytes().to_vec());
         out.append(&mut self.offset.to_le_bytes().to_vec());
         out.append(&mut self.data.clone());
-        let csum: u8 = out.iter().map(|x| *x as u64).sum::<u64>() as u8;
-        out.push(csum);
+        out.push(generate_checksum(&out));
         out
     }
 
@@ -405,19 +413,12 @@ impl TeleportData {
     }
 
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        validate_checksum(&input.to_vec())?;
         let size = input.len();
         let mut buf: &[u8] = input;
         self.length = buf.read_u32::<LittleEndian>().unwrap();
         self.offset = buf.read_u64::<LittleEndian>().unwrap();
         self.data = input[12..size - 1].to_vec();
-        let csumr = input[size - 1];
-        let csum: u8 = input[..size - 1].iter().map(|x| *x as u64).sum::<u64>() as u8;
-        if csum != csumr {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "TeleportData checksum is invalid",
-            ));
-        }
 
         Ok(())
     }
@@ -521,5 +522,17 @@ mod tests {
             data: vec![0x0a, 0x0a, 0x20, 0x03],
         };
         assert_eq!(t, test);
+    }
+
+    #[test]
+    fn test_generate_checksum() {
+        let t = TESTINITACK[..TESTINITACK.len() - 1].to_vec();
+        let c = generate_checksum(&t);
+        assert_eq!(c, TESTINITACK[TESTINITACK.len() - 1]);
+    }
+
+    #[test]
+    fn test_validate_checksum() {
+        assert_eq!((), validate_checksum(&TESTINITACK.to_vec()).unwrap());
     }
 }
