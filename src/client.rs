@@ -194,8 +194,8 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         }
 
         let duration = start_time.elapsed();
-        let speed = header.filesize as f64 / duration.as_secs() as f64 / 1024.0 / 1024.0;
-        println!(" done! Total time: {:?} Speed: {:.3} MBps", duration, speed);
+        let speed = (header.filesize as f64 * 8.0) / duration.as_secs() as f64 / 1024.0 / 1024.0;
+        println!(" done! Time: {:.2?} Speed: {:.3} Mbps", duration, speed);
     }
     Ok(())
 }
