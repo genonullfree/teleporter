@@ -137,6 +137,23 @@ pub fn calc_delta_hash(mut file: &File) -> Result<TeleportDelta, Error> {
     Ok(out)
 }
 
+fn vec_to_string(input: &[u8]) -> String {
+    let mut s: String = "".to_string();
+    for i in input.iter() {
+        let c: char = match (*i).try_into() {
+            Ok(c) => c,
+            Err(_) => break,
+        };
+        if c.is_ascii_graphic() || c == ' ' {
+            s.push(c);
+        } else {
+            break;
+        }
+    }
+
+    s
+}
+
 fn generate_checksum(input: &[u8]) -> u8 {
     input.iter().map(|x| *x as u64).sum::<u64>() as u8
 }
@@ -218,23 +235,6 @@ impl TeleportInit {
         }
     }
 
-    fn vec_to_string(input: &[u8]) -> String {
-        let mut s: String = "".to_string();
-        for i in input.iter() {
-            let c: char = match (*i).try_into() {
-                Ok(c) => c,
-                Err(_) => break,
-            };
-            if c.is_ascii_graphic() || c == ' ' {
-                s.push(c);
-            } else {
-                break;
-            }
-        }
-
-        s
-    }
-
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
         validate_checksum(&input)?;
         let mut buf: &[u8] = &input;
@@ -246,11 +246,11 @@ impl TeleportInit {
             ));
         }
         let mut ofs = 4;
-        self.protocol = TeleportInit::vec_to_string(&input[ofs..]);
+        self.protocol = vec_to_string(&input[ofs..]);
         ofs += self.protocol.len() + 1;
-        self.version = TeleportInit::vec_to_string(&input[ofs..]);
+        self.version = vec_to_string(&input[ofs..]);
         ofs += self.version.len() + 1;
-        self.filename = TeleportInit::vec_to_string(&input[ofs..]);
+        self.filename = vec_to_string(&input[ofs..]);
         ofs += self.filename.len() + 1;
         let mut buf: &[u8] = &input[ofs..];
         self.filenum = buf.read_u64::<LittleEndian>().unwrap();
@@ -361,7 +361,7 @@ impl TeleportInitAck {
         let mut buf: &[u8] = &input;
         let size = input.len();
         self.ack = buf.read_u8().unwrap().try_into().unwrap();
-        self.version = TeleportInit::vec_to_string(&input[1..]);
+        self.version = vec_to_string(&input[1..]);
         if size > self.version.len() + 3 {
             buf = &input[self.version.len() + 2..];
             let c: [u8; 32] = input[self.version.len() + 2 + 16..self.version.len() + 2 + 16 + 32]
