@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::result::Result;
 use std::str;
 use std::thread;
+use std::time::Instant;
 use structopt::StructOpt;
 
 mod client;
