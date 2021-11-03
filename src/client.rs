@@ -180,7 +180,10 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         let csum_recv = recv.delta.as_ref().map(|r| r.csum);
-        let checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
+        let mut checksum: Option<Hash> = None;
+        if recv.ack == TeleportInitStatus::Overwrite {
+            checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
+        }
 
         if checksum != None && checksum == csum_recv {
             // File matches hash
