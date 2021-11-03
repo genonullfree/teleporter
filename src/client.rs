@@ -62,6 +62,8 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
     // For each filepath in the input vector...
     for (num, item) in files.iter().enumerate() {
+        let start_time = Instant::now();
+
         let filepath = item;
         let mut filename = filepath.clone().to_string();
 
@@ -185,10 +187,12 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             send_delta_complete(stream, file)?;
         } else {
             // Send file data
-            send(stream, file, header, recv.delta)?;
+            send(stream, file, &header, recv.delta)?;
         }
 
-        println!(" done!");
+        let duration = start_time.elapsed();
+        let speed = header.filesize as f64 / duration.as_secs() as f64 / 1024.0 / 1024.0;
+        println!(" done! Total time: {:?} Speed: {:.3} MBps", duration, speed);
     }
     Ok(())
 }
@@ -232,7 +236,7 @@ fn send_delta_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
 fn send(
     mut stream: TcpStream,
     mut file: File,
-    header: TeleportInit,
+    header: &TeleportInit,
     delta: Option<TeleportDelta>,
 ) -> Result<(), Error> {
     let mut buf = Vec::<u8>::new();
