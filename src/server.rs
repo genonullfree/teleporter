@@ -77,6 +77,7 @@ fn compare_versions(recv: &str, have: &str) -> bool {
 
 /// Recv receives filenames and file data for a file
 fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(), Error> {
+    let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
     let mut file: File;
 
@@ -184,9 +185,12 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
 
         if len == 0 {
             if received == header.filesize {
+                let duration = start_time.elapsed();
+                let speed =
+                    (header.filesize as f64 * 8.0) / duration.as_secs() as f64 / 1024.0 / 1024.0;
                 println!(
-                    " => Received file: {} (from: {:?} v{})",
-                    &header.filename, ip, &header.version
+                    " => Received file: {} (from: {:?} v{}) ({:.2?} @ {:.3} Mbps)",
+                    &header.filename, ip, &header.version, duration, speed
                 );
             } else {
                 println!(" => Error receiving: {}", &header.filename);
