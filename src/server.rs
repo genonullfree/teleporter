@@ -109,6 +109,9 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         header.filename.remove(0);
     }
 
+    // Prohibit directory traversal
+    header.filename = header.filename.replace("../", "");
+
     // Test if overwrite is false and file exists
     if !header.overwrite && Path::new(&header.filename).exists() {
         println!(" => Refusing to overwrite file: {}", &header.filename);
