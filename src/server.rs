@@ -104,6 +104,11 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         return send_ack(resp, &stream);
     }
 
+    // Remove any preceeding '/'
+    if header.filename.starts_with('/') {
+        header.filename.remove(0);
+    }
+
     // Test if overwrite is false and file exists
     if !header.overwrite && Path::new(&header.filename).exists() {
         println!(" => Refusing to overwrite file: {}", &header.filename);
