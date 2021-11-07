@@ -114,7 +114,7 @@ is to simplify the protocol processing required and enable a better framework fo
 added easily.
 
 An encryption option will be added. This will ideally take place at the beginning of a file transfer,
-before the `TeleportInit` packet. Anything in the packets after the `iv` field in the header would be
+before the `TeleportInit` packet. Anything in the packets after the optional `iv` field in the header would be
 encrypted after the handshake has completed. The encryption will be optional based on an argument passed
 on the command line to enable it, due to encryption causing a longer transfer time. There will also be an
 option to require the server to only respond to encrypted requests.
@@ -157,7 +157,8 @@ pub struct TeleportInit {
     features: TeleportFeatures, // request features: delta, overwrite, save backup/original, etc
     chmod: u32,
     filesize: u64,
-    filename: String, // Null-terminated
+    filename_len: u16,
+    filename: Vec<char>,
     checksum: u8,
 }
 
@@ -172,7 +173,7 @@ pub enum TeleportFeatures {
 // Server to client
 pub struct TeleportInitAck {
     header: TeleportHeader,
-    status: TeleportStatus,
+    status: TeleportStatus,             // Response status
     version: [u16; 3],                  // Server version
     features: Option<TeleportFeatures>, // response features: new file, delta, overwrite, backup, rename, etc. features present if status is good
     delta: Option<TeleportDelta>        // included if delta feature enabled
@@ -193,15 +194,16 @@ pub struct TeleportDelta {
     size: u64,                  // Size of file
     checksum: Hash,             // File checksum
     chunk_size: u64,            // Size of chunk
+    delta_checksum_len: u16,    // Length of Vec of chunk checksums
     delta_checksum: Vec<Hash>,  // Vec of chunk checksums
 }
 
 // Client to server
 pub struct TeleportData {
     header: TeleportHeader,
-    length: u32,
-    offset: u64,
-    data: Vec<u8>,
+    offset: u64,            // Offset from beginning of file for data
+    data_len: u32,          // Length of Vec of data
+    data: Vec<u8>,          // File data
     checksum: u8
 }
 ```
