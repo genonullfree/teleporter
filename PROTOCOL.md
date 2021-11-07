@@ -105,3 +105,103 @@ are the file data. The `checksum` byte is a simple byte addition modulo `0xff` a
 
 Once the file is completely transferred the TCP connection is closed. If there is another file to
 transfer from the client, a new TCP connection is made.
+
+
+# Proposed v0.6.0 Protocol Specification
+
+The `v0.6.0` Teleport protocol will be a major rewrite of the Teleport protocol. The goal of this rewrite
+is to simplify the protocol processing required and enable a better framework for future features to be
+added easily.
+
+An encryption option will be added. This will ideally take place at the beginning of a file transfer,
+before the `TeleportInit` packet. Anything in the packets after the `iv` field in the header would be
+encrypted after the handshake has completed. The encryption will be optional based on an argument passed
+on the command line to enable it, due to encryption causing a longer transfer time. There will also be an
+option to require the server to only respond to encrypted requests.
+
+## v0.6.0
+```rust
+pub struct TeleportHeader {
+    protocol: u64, // [ 'T', 'E', 'L', 'E', 'P', 'O', 'R', 'T' ]
+    packet_len: u32,
+    action: TeleportAction,
+    iv: Option<u128>,
+}
+
+pub enum TeleportAction {
+    Init,
+    InitAck,
+    Data,
+    Encrypt,
+    EncryptAck,
+}
+
+// Client to Server
+pub struct TeleportEncrypt {
+    header: TeleportHeader,
+    pubkey_c: [u8; 32],
+    checksum: u8,
+}
+
+// Server to client
+pub struct TeleportEncryptAck {
+    header: TeleportHeader,
+    pubkey_s: [u8; 32],
+    checksum: u8,
+}
+
+// Client to server
+pub struct TeleportInit {
+    header: TeleportHeader,
+    version: [u16; 3], // [ major, minor, patch ]
+    features: TeleportFeatures, // request features: delta, overwrite, save backup/original, etc
+    chmod: u32,
+    filesize: u64,
+    filename: String, // Null-terminated
+    checksum: u8,
+}
+
+pub enum TeleportFeatures {
+    NewFile,    // Creating a new file on transfer
+    Delta,      // Enable delta file transfer
+    Overwrite,  // Overwrite file, if exists on server
+    Backup,     // Backup original, if exists on server
+    Rename,     // Rename transfer, if exists on server
+}
+
+// Server to client
+pub struct TeleportInitAck {
+    header: TeleportHeader,
+    status: TeleportStatus,
+    version: [u16; 3],                  // Server version
+    features: Option<TeleportFeatures>, // response features: new file, delta, overwrite, backup, rename, etc. features present if status is good
+    delta: Option<TeleportDelta>        // included if delta feature enabled
+    checksum: u8,
+}
+
+pub enum TeleportStatus {
+    Proceed,        // Success
+    NoOverwrite,    // Error
+    NoSpace,        // Error
+    NoPermission,   // Error
+    WrongVersion,   // Error
+    UnknownAction,  // Error
+    BadChecksum,    // Error
+}
+
+pub struct TeleportDelta {
+    size: u64,                  // Size of file
+    checksum: Hash,             // File checksum
+    chunk_size: u64,            // Size of chunk
+    delta_checksum: Vec<Hash>,  // Vec of chunk checksums
+}
+
+// Client to server
+pub struct TeleportData {
+    header: TeleportHeader,
+    length: u32,
+    offset: u64,
+    data: Vec<u8>,
+    checksum: u8
+}
+```
