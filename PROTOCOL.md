@@ -125,7 +125,7 @@ pub struct TeleportHeader {
     protocol: u64, // [ 'T', 'E', 'L', 'E', 'P', 'O', 'R', 'T' ]
     packet_len: u32,
     action: TeleportAction,
-    iv: Option<u128>,
+    iv: Option<[u8; 12]>,
 }
 
 pub enum TeleportAction {
