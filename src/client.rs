@@ -296,7 +296,7 @@ fn send(
         };
 
         sent += len;
-        print_updates(sent as f64, &header);
+        print_updates(sent as f64, header);
     }
 
     send_delta_complete(stream, file)?;

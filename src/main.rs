@@ -14,7 +14,9 @@ use std::time::Instant;
 use structopt::StructOpt;
 
 mod client;
+mod crypto;
 mod server;
+mod teleport;
 mod utils;
 
 /// Teleporter is a simple application for sending files from Point A to Point B
@@ -40,10 +42,20 @@ pub struct Opt {
     /// Recurse into directories on send
     #[structopt(short, long)]
     recursive: bool,
+
+    /// Encrypt the file transfer
+    #[structopt(short, long)]
+    encrypt: bool,
 }
 
 const PROTOCOL: &str = "TELEPORT";
+const PROTOCOL_NEXT: u64 = 0x54524f50454c4554;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+/*const VERSION_NEXT: [u16; 3] = [
+    env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap(),
+    env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap(),
+    env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap(),
+];*/
 
 #[derive(Debug)]
 pub struct TeleportInit {
