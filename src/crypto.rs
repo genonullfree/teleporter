@@ -1,3 +1,4 @@
+use crate::{Error, ErrorKind};
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key};
 use crypto::ed25519::{exchange, keypair};
@@ -17,12 +18,7 @@ pub fn calc_secret(public: &[u8; 32], private: &[u8; 64]) -> [u8; 32] {
     exchange(public, private)
 }
 
-pub fn decrypt(key: &[u8; 32], text: Vec<u8>) -> Result<Vec<u8>, &'static str> {
-    let (nonce, data) = match extract_iv_data(text) {
-        Ok((n, d)) => (n, d),
-        Err(s) => return Err(s),
-    };
-
+pub fn decrypt(key: &[u8; 32], nonce: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, Error> {
     let key = Key::from_slice(key);
     let cipher = Aes256Gcm::new(key);
     let gen_nonce = GenericArray::from_slice(&nonce);
@@ -34,39 +30,12 @@ pub fn decrypt(key: &[u8; 32], text: Vec<u8>) -> Result<Vec<u8>, &'static str> {
     Ok(plaintext.to_vec())
 }
 
-fn extract_iv_data(input: Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), &'static str> {
-    if input.len() < 13 {
-        return Err("Input too short");
-    }
-
-    let nonce = &input[..12];
-    let data = &input[12..];
-
-    Ok((nonce.to_vec(), data.to_vec()))
-}
-
-pub fn encrypt(key: &[u8; 32], nonce: Vec<u8>, input: Vec<u8>) -> Result<Vec<u8>, &'static str> {
+pub fn encrypt(key: &[u8; 32], nonce: Vec<u8>, input: Vec<u8>) -> Result<Vec<u8>, Error> {
     let key = Key::from_slice(key);
     let cipher = Aes256Gcm::new(key);
     let gen_nonce = GenericArray::from_slice(&nonce);
-    let ciphertext = cipher
-        .encrypt(gen_nonce, input.as_ref())
-        .expect("Encrypt failed");
-
-    match insert_iv_data(nonce, ciphertext) {
-        Ok(d) => Ok(d),
-        Err(s) => Err(s),
+    match cipher.encrypt(gen_nonce, input.as_ref()) {
+        Ok(s) => Ok(s),
+        Err(s) => Err(Error::new(ErrorKind::InvalidData, "Encryption failed")),
     }
-}
-
-fn insert_iv_data(mut nonce: Vec<u8>, mut data: Vec<u8>) -> Result<Vec<u8>, &'static str> {
-    let mut buf = Vec::<u8>::new();
-    if data.is_empty() {
-        return Err("No data to encrypt");
-    }
-
-    buf.append(&mut nonce);
-    buf.append(&mut data);
-
-    Ok(buf)
 }

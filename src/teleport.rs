@@ -1,5 +1,6 @@
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
+use rand::prelude::*;
 
 fn generate_checksum(input: &[u8]) -> u8 {
     input.iter().map(|x| *x as u64).sum::<u64>() as u8
@@ -156,27 +157,61 @@ impl TeleportHeader {
         Ok(())
     }
 }
-/*
-impl TryFrom<u8> for TeleportStatus {
-    type Error = &'static str;
 
-    fn try_from(v: u8) -> std::result::Result<Self, Self::Error> {
-        match v {
-            x if x == TeleportInitStatus::Proceed as u8 => Ok(TeleportInitStatus::Proceed),
-            x if x == TeleportInitStatus::Overwrite as u8 => Ok(TeleportInitStatus::Overwrite),
-            x if x == TeleportInitStatus::NoOverwrite as u8 => Ok(TeleportInitStatus::NoOverwrite),
-            x if x == TeleportInitStatus::NoSpace as u8 => Ok(TeleportInitStatus::NoSpace),
-            x if x == TeleportInitStatus::NoPermission as u8 => {
-                Ok(TeleportInitStatus::NoPermission)
-            }
-            x if x == TeleportInitStatus::WrongVersion as u8 => {
-                Ok(TeleportInitStatus::WrongVersion)
-            }
-            _ => Err("TeleportInitStatus is invalid"),
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct TeleportEnc {
+    secret: [u8; 32],
+    privkey: [u8; 64],
+    remote: [u8; 32],
+    public: TeleportEcdhExchange,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct TeleportEcdhExchange {
+    key: [u8; 32],
+}
+
+impl TeleportEnc {
+    pub fn new() -> TeleportEnc {
+        let (privkey, pubkey) = crypto::genkey();
+        TeleportEnc {
+            secret: [0; 32],
+            remote: [0; 32],
+            privkey,
+            public: TeleportEcdhExchange { key: pubkey },
         }
     }
+
+    pub fn serialize(self) -> Vec<u8> {
+        self.public.key.to_vec()
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        if input.len() < 32 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Not enough data for public key",
+            ));
+        }
+
+        self.remote = input[..32].try_into().expect("Error reading public key");
+
+        Ok(())
+    }
+
+    pub fn calc_secret(&mut self) {
+        self.secret = crypto::calc_secret(&self.remote, &self.privkey)
+    }
+
+    pub fn encrypt(self, nonce: &[u8; 12], input: &[u8]) -> Result<Vec<u8>, Error> {
+        crypto::encrypt(&self.secret, nonce.to_vec(), input.to_vec())
+    }
+
+    pub fn decrypt(self, nonce: &[u8; 12], input: &[u8]) -> Result<Vec<u8>, Error> {
+        crypto::decrypt(&self.secret, nonce.to_vec(), input.to_vec())
+    }
 }
-*/
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -205,5 +240,42 @@ mod tests {
         let mut t = TeleportHeader::new();
         t.deserialize(TESTINIT.to_vec());
         assert_eq!(t, test);
+    }
+
+    #[test]
+    fn test_teleportenc_key_exchange() {
+        let mut a = TeleportEnc::new();
+        let mut b = TeleportEnc::new();
+
+        a.deserialize(&b.serialize());
+        b.deserialize(&a.serialize());
+
+        a.calc_secret();
+        b.calc_secret();
+
+        assert_eq!(a.secret, b.secret);
+    }
+
+    #[test]
+    fn test_teleportenc_encrypt_decrypt() {
+        let mut rng = StdRng::from_entropy();
+        let mut nonce: [u8; 12] = [0; 12];
+
+        let mut a = TeleportEnc::new();
+        let mut b = TeleportEnc::new();
+
+        a.deserialize(&b.serialize());
+        b.deserialize(&a.serialize());
+
+        a.calc_secret();
+        b.calc_secret();
+        assert_eq!(a.secret, b.secret);
+
+        let data = TESTINIT.to_vec();
+        rng.fill(&mut nonce);
+        let ciphertext = a.encrypt(&nonce, &data).unwrap();
+        let plaintext = b.decrypt(&nonce, &ciphertext).unwrap();
+
+        assert_eq!(plaintext, data);
     }
 }
