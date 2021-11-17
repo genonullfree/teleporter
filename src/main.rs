@@ -1,4 +1,5 @@
 use blake3::Hash;
+use semver::Version;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::io::{Error, ErrorKind};
@@ -51,11 +52,6 @@ pub struct Opt {
 const PROTOCOL: &str = "TELEPORT";
 const PROTOCOL_NEXT: u64 = 0x54524f50454c4554;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-/*const VERSION_NEXT: [u16; 3] = [
-    env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap(),
-    env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap(),
-    env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap(),
-];*/
 
 #[derive(Debug)]
 pub struct TeleportInit {
