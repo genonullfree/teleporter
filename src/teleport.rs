@@ -242,7 +242,7 @@ impl TeleportInit {
                 version.patch as u16,
             ],
             features: features as u32,
-            chmod: 0644,
+            chmod: 0o644,
             filesize: 0,
             filename_len: 0,
             filename: Vec::<char>::new(),
@@ -277,7 +277,7 @@ impl TeleportInit {
     }
 
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
-        let mut buf: &[u8] = &input;
+        let mut buf: &[u8] = input;
 
         // Extract version info
         for i in &mut self.version {
@@ -310,6 +310,118 @@ impl TeleportInit {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TeleportInitAck {
+    status: TeleportStatus,
+    version: [u16; 3],
+    features: Option<u32>,
+    delta: Option<TeleportDelta>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TeleportStatus {
+    Proceed,
+    NoOverwrite,
+    NoSpace,
+    NoPermission,
+    WrongVersion,
+    UnknownAction,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TeleportDelta {
+    filesize: u64,
+    checksum: Hash,
+    chunk_size: u64,
+    delta_checksum_len: u16,
+    delta_checksum: Vec<Hash>,
+}
+
+impl TeleportDelta {
+    pub fn new() -> TeleportDelta {
+        TeleportDelta {
+            filesize: 0,
+            checksum: [0; 32].try_into().unwrap(),
+            chunk_size: 0,
+            delta_checksum_len: 0,
+            delta_checksum: Vec::<Hash>::new(),
+        }
+    }
+
+    fn delta_serial(input: &[Hash]) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+
+        for i in input {
+            out.append(&mut i.as_bytes().to_vec());
+        }
+
+        out
+    }
+
+    pub fn serialize(self) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+
+        // Add file size
+        out.append(&mut self.filesize.to_le_bytes().to_vec());
+
+        // Add file hash
+        out.append(&mut self.checksum.as_bytes().to_vec());
+
+        // Add chunk size
+        out.append(&mut self.chunk_size.to_le_bytes().to_vec());
+
+        // Add delta vector length
+        let dlen = self.delta_checksum.len() as u16;
+        out.append(&mut dlen.to_le_bytes().to_vec());
+
+        // Add delta vector
+        out.append(&mut TeleportDelta::delta_serial(&self.delta_checksum));
+
+        out
+    }
+
+    fn delta_deserial(input: &[u8]) -> Result<Vec<Hash>, Error> {
+        if input.len() % 32 != 0 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Cannot deserialize Vec<Hash>",
+            ));
+        }
+
+        let mut out = Vec::<Hash>::new();
+
+        for i in input.chunks(32) {
+            let a: [u8; 32] = i.try_into().unwrap();
+            let h: Hash = a.try_into().unwrap();
+            out.push(h);
+        }
+
+        Ok(out)
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        let mut buf: &[u8] = input;
+
+        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
+
+        // Extract file hash
+        let csum: [u8; 32] = input[8..40].try_into().unwrap();
+        self.checksum = csum.try_into().unwrap();
+        let mut buf: &[u8] = &input[40..];
+
+        // Extract chunk size
+        self.chunk_size = buf.read_u64::<LittleEndian>().unwrap();
+
+        // Extract delta vector length
+        self.delta_checksum_len = buf.read_u16::<LittleEndian>().unwrap();
+
+        // Extract delta vector
+        self.delta_checksum = TeleportDelta::delta_deserial(&input[50..]).unwrap();
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,8 +433,12 @@ mod tests {
     const TESTHEADERIV: &[u8; 12] = &[5, 48, 46, 50, 46, 51, 0, 246, 9, 10, 11, 12];
     const TESTDATA: &[u8] = &[4, 0, 0, 0, 184, 34, 0, 0, 0, 0, 0, 0, 10, 10, 32, 3, 21];
     const TESTINIT: &[u8] = &[
-        0, 0, 5, 0, 5, 0, 5, 0, 0, 0, 243, 2, 0, 0, 57, 48, 0, 0, 0, 0, 0, 0, 4, 0, 102, 105, 108,
+        0, 0, 5, 0, 5, 0, 5, 0, 0, 0, 237, 1, 0, 0, 57, 48, 0, 0, 0, 0, 0, 0, 4, 0, 102, 105, 108,
         101,
+    ];
+    const TESTDELTA: &[u8] = &[
+        177, 104, 222, 58, 0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
+        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 21, 205, 91, 7, 0, 0, 0, 0, 0, 0,
     ];
 
     #[test]
@@ -386,7 +502,7 @@ mod tests {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
         test.filename = vec!['f', 'i', 'l', 'e'];
         test.filesize = 12345;
-        test.chmod = 0755;
+        test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
         let out = test.serialize();
@@ -399,13 +515,40 @@ mod tests {
         test.filename = vec!['f', 'i', 'l', 'e'];
         test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
-        test.chmod = 0755;
+        test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
         let mut t = TeleportInit::new(TeleportFeatures::NewFile);
         t.deserialize(TESTINIT);
 
         println!("{:?}", t);
+        assert_eq!(test, t);
+    }
+
+    #[test]
+    fn test_teleportdelta_serialize() {
+        let mut test = TeleportDelta::new();
+        test.filesize = 987654321;
+        test.checksum = [5; 32].try_into().unwrap();
+        test.chunk_size = 123456789;
+        test.delta_checksum = Vec::<Hash>::new();
+
+        let out = test.serialize();
+
+        assert_eq!(out, TESTDELTA);
+    }
+
+    #[test]
+    fn test_teleportdelta_deserialize() {
+        let mut test = TeleportDelta::new();
+        test.filesize = 987654321;
+        test.checksum = [5; 32].try_into().unwrap();
+        test.chunk_size = 123456789;
+        test.delta_checksum = Vec::<Hash>::new();
+
+        let mut t = TeleportDelta::new();
+        t.deserialize(TESTDELTA);
+
         assert_eq!(test, t);
     }
 }
