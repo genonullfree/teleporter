@@ -154,7 +154,7 @@ pub struct TeleportEncryptAck {
 pub struct TeleportInit {
     header: TeleportHeader,
     version: [u16; 3], // [ major, minor, patch ]
-    features: TeleportFeatures, // request features: delta, overwrite, save backup/original, etc
+    features: TeleportFeatures, // request features: delta, overwrite, save backup/original, etc, as u32
     chmod: u32,
     filesize: u64,
     filename_len: u16,
@@ -173,9 +173,9 @@ pub enum TeleportFeatures {
 // Server to client
 pub struct TeleportInitAck {
     header: TeleportHeader,
-    status: TeleportStatus,             // Response status
+    status: TeleportStatus,             // Response status, as u8
     version: [u16; 3],                  // Server version
-    features: Option<TeleportFeatures>, // response features: new file, delta, overwrite, backup, rename, etc. features present if status is good
+    features: Option<TeleportFeatures>, // response features: new file, delta, overwrite, backup, rename, etc. features present if status is good, as u32
     delta: Option<TeleportDelta>        // included if delta feature enabled
     checksum: u8,
 }

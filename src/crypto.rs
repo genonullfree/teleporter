@@ -36,6 +36,6 @@ pub fn encrypt(key: &[u8; 32], nonce: Vec<u8>, input: Vec<u8>) -> Result<Vec<u8>
     let gen_nonce = GenericArray::from_slice(&nonce);
     match cipher.encrypt(gen_nonce, input.as_ref()) {
         Ok(s) => Ok(s),
-        Err(s) => Err(Error::new(ErrorKind::InvalidData, "Encryption failed")),
+        Err(_) => Err(Error::new(ErrorKind::InvalidData, "Encryption failed")),
     }
 }
