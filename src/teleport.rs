@@ -422,6 +422,60 @@ impl TeleportDelta {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct TeleportData {
+    offset: u64,
+    data_len: u32,
+    data: Vec<u8>,
+}
+
+impl TeleportData {
+    pub fn new() -> TeleportData {
+        TeleportData {
+            offset: 0,
+            data_len: 0,
+            data: Vec::<u8>::new(),
+        }
+    }
+
+    pub fn serialize(&mut self) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+
+        // Add offset
+        out.append(&mut self.offset.to_le_bytes().to_vec());
+
+        // Add data length
+        let length = self.data.len() as u32;
+        out.append(&mut length.to_le_bytes().to_vec());
+
+        // Add data
+        out.append(&mut self.data);
+
+        out
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        let mut buf: &[u8] = input;
+
+        // Extract offset
+        self.offset = buf.read_u64::<LittleEndian>().unwrap();
+
+        // Extract data length
+        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
+
+        // Extract data
+        self.data = input[12..].to_vec();
+        if self.data.len() != self.data_len as usize {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Filename incorrect length",
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,6 +494,7 @@ mod tests {
         177, 104, 222, 58, 0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
         5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 21, 205, 91, 7, 0, 0, 0, 0, 0, 0,
     ];
+    const TESTDATAPKT: &[u8] = &[49, 212, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 1, 2, 3, 4, 5];
 
     #[test]
     fn test_teleportheader_serialize() {
@@ -548,6 +603,31 @@ mod tests {
 
         let mut t = TeleportDelta::new();
         t.deserialize(TESTDELTA);
+
+        assert_eq!(test, t);
+    }
+
+    #[test]
+    fn test_teleportdata_serialize() {
+        let mut test = TeleportData::new();
+        test.offset = 54321;
+        test.data_len = 5;
+        test.data = vec![1, 2, 3, 4, 5];
+
+        let out = test.serialize();
+
+        assert_eq!(out, TESTDATAPKT);
+    }
+
+    #[test]
+    fn test_teleportdata_deserialize() {
+        let mut test = TeleportData::new();
+        test.offset = 54321;
+        test.data_len = 5;
+        test.data = vec![1, 2, 3, 4, 5];
+
+        let mut t = TeleportData::new();
+        t.deserialize(TESTDATAPKT);
 
         assert_eq!(test, t);
     }
