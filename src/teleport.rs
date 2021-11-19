@@ -68,8 +68,8 @@ fn write_version(input: [u16; 3]) -> Vec<u8> {
 pub struct TeleportHeader {
     protocol: u64,
     action: u8,
-    iv: Option<[u8; 12]>,
-    data: Vec<u8>,
+    pub iv: Option<[u8; 12]>,
+    pub data: Vec<u8>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -83,10 +83,10 @@ pub enum TeleportAction {
 }
 
 impl TeleportHeader {
-    pub fn new() -> TeleportHeader {
+    pub fn new(action: TeleportAction) -> TeleportHeader {
         TeleportHeader {
             protocol: PROTOCOL_NEXT,
-            action: TeleportAction::Init as u8,
+            action: action as u8,
             iv: None,
             data: Vec::<u8>::new(),
         }
@@ -583,7 +583,7 @@ mod tests {
 
     #[test]
     fn test_teleportheader_serialize() {
-        let mut t = TeleportHeader::new();
+        let mut t = TeleportHeader::new(TeleportAction::Init);
         t.data.append(&mut TESTDATA.to_vec());
         t.action |= TeleportAction::Encrypted as u8;
         t.iv = Some(*TESTHEADERIV);
@@ -593,11 +593,11 @@ mod tests {
 
     #[test]
     fn test_teleportheader_deserialize() {
-        let mut test = TeleportHeader::new();
+        let mut test = TeleportHeader::new(TeleportAction::Init);
         test.data.append(&mut TESTDATA.to_vec());
         test.action |= TeleportAction::Encrypted as u8;
         test.iv = Some(*TESTHEADERIV);
-        let mut t = TeleportHeader::new();
+        let mut t = TeleportHeader::new(TeleportAction::Init);
         t.deserialize(TESTHEADER.to_vec());
         assert_eq!(t, test);
     }

@@ -1,5 +1,7 @@
+use crate::teleport::{TeleportAction, TeleportEnc, TeleportHeader};
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
+use rand::prelude::*;
 
 struct SizeUnit {
     value: f64,
@@ -53,6 +55,37 @@ fn identify_unit(mut value: f64) -> SizeUnit {
         value,
         unit: unit[count],
     }
+}
+
+fn send_packet(
+    sock: &mut TcpStream,
+    action: TeleportAction,
+    enc: Option<TeleportEnc>,
+    mut data: &mut Vec<u8>,
+) -> Result<(), Error> {
+    let mut header = TeleportHeader::new(action);
+
+    // If encryption is enabled
+    if let Some(ctx) = enc {
+        // Use random IV
+        let mut rng = StdRng::from_entropy();
+        let mut iv: [u8; 12] = [0; 12];
+        rng.fill(&mut iv);
+
+        // Encrypt the data array
+        *data = ctx.encrypt(&iv, data)?;
+
+        // Set the IV in the header
+        header.iv = Some(iv);
+    }
+
+    // Serialize the message
+    let message = header.serialize();
+
+    // Send the packet
+    sock.write_all(&message)?;
+
+    Ok(())
 }
 
 fn gen_chunk_size(file_size: u64) -> usize {

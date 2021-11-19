@@ -124,7 +124,7 @@ option to require the server to only respond to encrypted requests.
 pub struct TeleportHeader {
     protocol: u64, // [ 'T', 'E', 'L', 'E', 'P', 'O', 'R', 'T' ]
     packet_len: u32,
-    action: TeleportAction,
+    action: TeleportAction, // as u8
     iv: Option<[u8; 12]>,
 }
 
