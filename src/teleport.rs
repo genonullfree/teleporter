@@ -2,68 +2,6 @@ use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
 
-fn generate_checksum(input: &[u8]) -> u8 {
-    input.iter().map(|x| *x as u64).sum::<u64>() as u8
-}
-
-fn validate_checksum(input: &[u8]) -> Result<(), Error> {
-    if input.len() < 2 {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Vector is too short to validate checksum",
-        ));
-    }
-
-    let checksum: u8 = input[..input.len() - 1]
-        .iter()
-        .map(|x| *x as u64)
-        .sum::<u64>() as u8;
-    if checksum != *input.last().unwrap() {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "Teleport checksum is invalid",
-        ));
-    }
-
-    Ok(())
-}
-
-fn vec_to_string(input: &[u8], size: u16) -> Vec<char> {
-    let mut s = Vec::<char>::new();
-    for i in input.iter() {
-        let c: char = match (*i).try_into() {
-            Ok(c) => c,
-            Err(_) => break,
-        };
-        if c.is_ascii_graphic() || c == ' ' {
-            s.push(c);
-        } else {
-            break;
-        }
-        if s.len() == size.into() {
-            break;
-        }
-    }
-
-    s
-}
-
-fn read_version(mut input: &[u8]) -> [u16; 3] {
-    let mut out: [u16; 3] = [0; 3];
-    for i in &mut out {
-        *i = input.read_u16::<LittleEndian>().unwrap();
-    }
-    out
-}
-
-fn write_version(input: [u16; 3]) -> Vec<u8> {
-    let mut out = Vec::<u8>::new();
-    for i in &input {
-        out.append(&mut i.to_le_bytes().to_vec());
-    }
-    out
-}
-
 #[derive(Debug, PartialEq)]
 pub struct TeleportHeader {
     protocol: u64,
@@ -198,6 +136,8 @@ impl TeleportEnc {
 
         self.remote = input[..32].try_into().expect("Error reading public key");
 
+        self.calc_secret();
+
         Ok(())
     }
 
@@ -314,10 +254,10 @@ impl TeleportInit {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TeleportInitAck {
-    status: u8,
-    version: [u16; 3],
-    features: Option<u32>,
-    delta: Option<TeleportDelta>,
+    pub status: u8,
+    pub version: [u16; 3],
+    pub features: Option<u32>,
+    pub delta: Option<TeleportDelta>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -330,12 +270,31 @@ pub enum TeleportStatus {
     UnknownAction,
 }
 
+impl TryFrom<u8> for TeleportStatus {
+    type Error = std::io::Error;
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        match v {
+            x if x == TeleportStatus::Proceed as u8 => Ok(TeleportStatus::Proceed),
+            x if x == TeleportStatus::NoOverwrite as u8 => Ok(TeleportStatus::NoOverwrite),
+            x if x == TeleportStatus::NoSpace as u8 => Ok(TeleportStatus::NoSpace),
+            x if x == TeleportStatus::NoPermission as u8 => Ok(TeleportStatus::NoPermission),
+            x if x == TeleportStatus::WrongVersion as u8 => Ok(TeleportStatus::WrongVersion),
+            x if x == TeleportStatus::UnknownAction as u8 => Ok(TeleportStatus::UnknownAction),
+            _ => Err(Error::new(
+                ErrorKind::InvalidData,
+                "TeleportStatus is invalid",
+            )),
+        }
+    }
+}
+
 impl TeleportInitAck {
-    pub fn new(status: u8) -> TeleportInitAck {
+    pub fn new(status: TeleportStatus) -> TeleportInitAck {
         let version = Version::parse(VERSION).unwrap();
 
         TeleportInitAck {
-            status,
+            status: status as u8,
             version: [
                 version.major as u16,
                 version.minor as u16,
@@ -416,11 +375,11 @@ impl TeleportInitAck {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TeleportDelta {
-    filesize: u64,
-    checksum: Hash,
-    chunk_size: u64,
+    pub filesize: u64,
+    pub checksum: Hash,
+    pub chunk_size: u64,
     delta_checksum_len: u16,
-    delta_checksum: Vec<Hash>,
+    pub delta_checksum: Vec<Hash>,
 }
 
 impl TeleportDelta {
@@ -510,9 +469,9 @@ impl TeleportDelta {
 
 #[derive(Debug, PartialEq)]
 pub struct TeleportData {
-    offset: u64,
-    data_len: u32,
-    data: Vec<u8>,
+    pub offset: u64,
+    pub data_len: u32,
+    pub data: Vec<u8>,
 }
 
 impl TeleportData {
@@ -600,7 +559,7 @@ mod tests {
         test.action |= TeleportAction::Encrypted as u8;
         test.iv = Some(*TESTHEADERIV);
         let mut t = TeleportHeader::new(TeleportAction::Init);
-        t.deserialize(TESTHEADER.to_vec());
+        t.deserialize(TESTHEADER.to_vec()).unwrap();
         assert_eq!(t, test);
     }
 
@@ -609,8 +568,8 @@ mod tests {
         let mut a = TeleportEnc::new();
         let mut b = TeleportEnc::new();
 
-        a.deserialize(&b.serialize());
-        b.deserialize(&a.serialize());
+        a.deserialize(&b.serialize()).unwrap();
+        b.deserialize(&a.serialize()).unwrap();
 
         a.calc_secret();
         b.calc_secret();
@@ -626,8 +585,8 @@ mod tests {
         let mut a = TeleportEnc::new();
         let mut b = TeleportEnc::new();
 
-        a.deserialize(&b.serialize());
-        b.deserialize(&a.serialize());
+        a.deserialize(&b.serialize()).unwrap();
+        b.deserialize(&a.serialize()).unwrap();
 
         a.calc_secret();
         b.calc_secret();
@@ -665,7 +624,7 @@ mod tests {
         test.features |= TeleportFeatures::Overwrite as u32;
 
         let mut t = TeleportInit::new(TeleportFeatures::NewFile);
-        t.deserialize(TESTINIT);
+        t.deserialize(TESTINIT).unwrap();
         t.version = [0, 5, 5];
 
         assert_eq!(test, t);
@@ -693,7 +652,7 @@ mod tests {
         test.delta_checksum = Vec::<Hash>::new();
 
         let mut t = TeleportDelta::new();
-        t.deserialize(TESTDELTA);
+        t.deserialize(TESTDELTA).unwrap();
 
         assert_eq!(test, t);
     }
@@ -718,14 +677,14 @@ mod tests {
         test.data = vec![1, 2, 3, 4, 5];
 
         let mut t = TeleportData::new();
-        t.deserialize(TESTDATAPKT);
+        t.deserialize(TESTDATAPKT).unwrap();
 
         assert_eq!(test, t);
     }
 
     #[test]
     fn test_teleportinitack_serialize() {
-        let mut test = TeleportInitAck::new(TeleportStatus::Proceed as u8);
+        let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Rename as u32;
         test.features = Some(feat);
         let out = test.serialize();
@@ -735,12 +694,12 @@ mod tests {
 
     #[test]
     fn test_teleportinitack_deserialize() {
-        let mut test = TeleportInitAck::new(TeleportStatus::Proceed as u8);
+        let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Rename as u32;
         test.features = Some(feat);
 
-        let mut t = TeleportInitAck::new(TeleportStatus::Proceed as u8);
-        t.deserialize(TESTINITACK);
+        let mut t = TeleportInitAck::new(TeleportStatus::Proceed);
+        t.deserialize(TESTINITACK).unwrap();
 
         assert_eq!(test, t);
     }

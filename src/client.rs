@@ -1,5 +1,6 @@
-use crate::teleport::TeleportInit;
-use crate::teleport::{TeleportAction, TeleportFeatures};
+use crate::teleport::*;
+use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
+use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
 use std::path::Path;
@@ -100,11 +101,14 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
         let meta = file.metadata()?;
         let mut header = TeleportInit::new(TeleportFeatures::NewFile);
-        let mut features = TeleportFeatures::Delta as u32;
+        let mut features: u32 = 0;
+        if !opt.no_delta {
+            features |= TeleportFeatures::Delta as u32;
+        }
         if opt.overwrite {
             features |= TeleportFeatures::Overwrite as u32;
         }
-        header.features = features;
+        header.features |= features;
         header.chmod = meta.permissions().mode();
         header.filesize = meta.len();
         header.filename = filename.chars().collect();
@@ -133,40 +137,33 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         utils::send_packet(&mut stream, TeleportAction::Init, None, header.serialize())?;
 
         // Receive response from server
-        let recv = match recv_ack(&stream) {
-            Some(t) => t,
-            None => {
-                println!("Receive TeleportInitAck timed out");
-                return Ok(());
-            }
-        };
+        let packet = utils::recv_packet(&mut stream, None)?;
+        let mut recv = TeleportInitAck::new(TeleportStatus::UnknownAction);
+        recv.deserialize(&packet.data)?;
 
         // Validate response
-        match &recv.ack {
-            TeleportInitStatus::Overwrite => {
-                println!("The server is overwriting the file: {:?}", &filename)
-            }
-            TeleportInitStatus::NoOverwrite => {
+        match recv.status.try_into().unwrap() {
+            TeleportStatus::NoOverwrite => {
                 println!("The server refused to overwrite the file: {:?}", &filename);
                 continue;
             }
-            TeleportInitStatus::NoPermission => {
+            TeleportStatus::NoPermission => {
                 println!(
                     "The server does not have permission to write to this file: {:?}",
                     &filename
                 );
                 continue;
             }
-            TeleportInitStatus::NoSpace => {
+            TeleportStatus::NoSpace => {
                 println!(
                     "The server has no space available to write the file: {:?}",
                     &filename
                 );
                 continue;
             }
-            TeleportInitStatus::WrongVersion => {
+            TeleportStatus::WrongVersion => {
                 println!(
-                    "Error: Version mismatch! Server: {} Us: {}",
+                    "Error: Version mismatch! Server: {:?} Us: {}",
                     recv.version, VERSION
                 );
                 break;
@@ -174,10 +171,12 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             _ => (),
         };
 
-        let csum_recv = recv.delta.as_ref().map(|r| r.csum);
+        let csum_recv = recv.delta.as_ref().map(|r| r.checksum);
         let mut checksum: Option<Hash> = None;
-        if recv.ack == TeleportInitStatus::Overwrite {
-            checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
+        if let Some(feat) = recv.features {
+            if feat & TeleportFeatures::Overwrite as u32 == TeleportFeatures::Overwrite as u32 {
+                checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
+            }
         }
 
         if checksum != None && checksum == csum_recv {
@@ -195,37 +194,17 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     Ok(())
 }
 
-fn recv_ack(mut stream: &TcpStream) -> Option<TeleportInitAck> {
-    let mut buf: [u8; 4096 * 3] = [0; 4096 * 3];
-
-    // Receive ACK that the server is ready for data
-    let len = match stream.read(&mut buf) {
-        Ok(l) => l,
-        Err(_) => return None,
-    };
-
-    let fix = &buf[..len];
-    let mut resp = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
-    if let Err(e) = resp.deserialize(fix.to_vec()) {
-        println!("{:?}", e);
-        return None;
-    };
-
-    Some(resp)
-}
-
 fn send_delta_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
     let meta = file.metadata()?;
 
-    let chunk = TeleportData {
-        length: 0,
+    let mut chunk = TeleportData {
         offset: meta.len() as u64,
+        data_len: 0,
         data: Vec::<u8>::new(),
     };
 
     // Send the data chunk
-    stream.write_all(&chunk.serialize())?;
-    stream.flush()?;
+    utils::send_packet(&mut stream, TeleportAction::Data, None, chunk.serialize())?;
 
     Ok(())
 }
@@ -242,8 +221,8 @@ fn send(
     let mut hasher = blake3::Hasher::new();
     match delta {
         Some(d) => {
-            buf.resize(d.delta_size as usize, 0);
-            hash_list = d.delta_csum;
+            buf.resize(d.chunk_size as usize, 0);
+            hash_list = d.delta_checksum;
         }
         None => buf.resize(4096, 0),
     }
@@ -274,21 +253,14 @@ fn send(
         }
 
         let data = &buf[..len];
-        let chunk = TeleportData {
-            length: len as u32,
+        let mut chunk = TeleportData {
             offset: sent as u64,
+            data_len: len as u32,
             data: data.to_vec(),
         };
 
         // Send the data chunk
-        match stream.write_all(&chunk.serialize()) {
-            Ok(_) => {}
-            Err(s) => return Err(s),
-        };
-        match stream.flush() {
-            Ok(_) => {}
-            Err(s) => return Err(s),
-        };
+        utils::send_packet(&mut stream, TeleportAction::Data, None, chunk.serialize())?;
 
         sent += len;
         print_updates(sent as f64, header);

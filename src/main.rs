@@ -47,43 +47,14 @@ pub struct Opt {
     /// Encrypt the file transfer
     #[structopt(short, long)]
     encrypt: bool,
+
+    /// Disable delta transfer (overwrite always overwrites completely)
+    #[structopt(short, long)]
+    no_delta: bool,
 }
 
 const PROTOCOL: u64 = 0x54524f50454c4554;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-#[derive(Debug, PartialEq)]
-pub struct TeleportInitAck {
-    ack: TeleportInitStatus,
-    version: String,
-    delta: Option<TeleportDelta>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct TeleportDelta {
-    size: u64,
-    delta_size: u64,
-    csum: Hash,
-    delta_csum: Vec<Hash>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TeleportData {
-    length: u32,
-    offset: u64,
-    data: Vec<u8>,
-}
-
-/// TeleportInitStatus type when header is received and ready to receive file data or not
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum TeleportInitStatus {
-    Proceed,      // Success
-    Overwrite,    // Success, delta overwrite
-    NoOverwrite,  // Error
-    NoSpace,      // Error
-    NoPermission, // Error
-    WrongVersion, // Error
-}
 
 fn main() {
     // Process arguments
