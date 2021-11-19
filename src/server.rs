@@ -61,11 +61,10 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let mut file: File;
 
     // Receive header first
-    let mut name_buf: [u8; 4096] = [0; 4096];
-    let len = stream.read(&mut name_buf)?;
-    let fix = &name_buf[..len];
+    let packet = utils::recv_packet(&mut stream, None)?;
+
     let mut header = TeleportInit::new(TeleportFeatures::NewFile);
-    if header.deserialize(&fix.to_vec()).is_err() {
+    if header.deserialize(&packet.data).is_err() {
         return Err(Error::new(
             ErrorKind::InvalidData,
             "Data received did not match expected",

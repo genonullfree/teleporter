@@ -49,8 +49,7 @@ pub struct Opt {
     encrypt: bool,
 }
 
-const PROTOCOL: &str = "TELEPORT";
-const PROTOCOL_NEXT: u64 = 0x54524f50454c4554;
+const PROTOCOL: u64 = 0x54524f50454c4554;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, PartialEq)]

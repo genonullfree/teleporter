@@ -1,5 +1,5 @@
-use crate::teleport::TeleportFeatures;
 use crate::teleport::TeleportInit;
+use crate::teleport::{TeleportAction, TeleportFeatures};
 use crate::utils::print_updates;
 use crate::*;
 use std::path::Path;
@@ -99,7 +99,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         }
 
         let meta = file.metadata()?;
-        let mut header = TeleportInit::new(TeleportFeatures::Delta);
+        let mut header = TeleportInit::new(TeleportFeatures::NewFile);
         let mut features = TeleportFeatures::Delta as u32;
         if opt.overwrite {
             features |= TeleportFeatures::Overwrite as u32;
@@ -130,7 +130,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         println!("Sending file {}/{}: {}", num + 1, files.len(), &filename);
 
         // Send header first
-        stream.write_all(&header.serialize())?;
+        utils::send_packet(&mut stream, TeleportAction::Init, None, header.serialize())?;
 
         // Receive response from server
         let recv = match recv_ack(&stream) {

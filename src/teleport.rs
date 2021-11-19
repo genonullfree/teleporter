@@ -85,7 +85,7 @@ pub enum TeleportAction {
 impl TeleportHeader {
     pub fn new(action: TeleportAction) -> TeleportHeader {
         TeleportHeader {
-            protocol: PROTOCOL_NEXT,
+            protocol: PROTOCOL,
             action: action as u8,
             iv: None,
             data: Vec::<u8>::new(),
@@ -125,12 +125,13 @@ impl TeleportHeader {
 
         // Extract Protocol
         self.protocol = buf.read_u64::<LittleEndian>().unwrap();
-        if self.protocol != PROTOCOL_NEXT {
+        if self.protocol != PROTOCOL {
             return Err(Error::new(ErrorKind::InvalidData, "Error reading protocol"));
         }
 
         // Extract data length
         let data_len = buf.read_u32::<LittleEndian>().unwrap() as usize;
+        let mut data_ofs = 13;
 
         // Extract action code
         let action = buf.read_u8().unwrap();
@@ -143,10 +144,11 @@ impl TeleportHeader {
             }
             let iv: [u8; 12] = input[13..25].try_into().expect("Error reading IV");
             self.iv = Some(iv);
+            data_ofs += 12;
         }
 
         // Extract data
-        self.data = input[25..].to_vec();
+        self.data = input[data_ofs..].to_vec();
         if self.data.len() != data_len {
             return Err(Error::new(
                 ErrorKind::InvalidData,

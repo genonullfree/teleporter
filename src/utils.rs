@@ -62,7 +62,7 @@ pub fn send_packet(
     sock: &mut TcpStream,
     action: TeleportAction,
     enc: Option<TeleportEnc>,
-    mut data: &mut Vec<u8>,
+    data: Vec<u8>,
 ) -> Result<(), Error> {
     let mut header = TeleportHeader::new(action);
 
@@ -74,10 +74,12 @@ pub fn send_packet(
         rng.fill(&mut iv);
 
         // Encrypt the data array
-        *data = ctx.encrypt(&iv, data)?;
+        header.data = ctx.encrypt(&iv, &data)?;
 
         // Set the IV in the header
         header.iv = Some(iv);
+    } else {
+        header.data = data;
     }
 
     // Serialize the message
@@ -98,7 +100,7 @@ pub fn recv_packet(
 
     let mut init: &[u8] = &initbuf;
     let protocol = init.read_u64::<LittleEndian>().unwrap();
-    if protocol != PROTOCOL_NEXT {
+    if protocol != PROTOCOL {
         return Err(Error::new(ErrorKind::InvalidData, "Invalid protocol"));
     }
 
