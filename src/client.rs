@@ -1,3 +1,5 @@
+use crate::teleport::TeleportFeatures;
+use crate::teleport::TeleportInit;
 use crate::utils::print_updates;
 use crate::*;
 use std::path::Path;
@@ -97,16 +99,15 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         }
 
         let meta = file.metadata()?;
-        let header = TeleportInit {
-            protocol: PROTOCOL.to_string(),
-            version: VERSION.to_string(),
-            filenum: (num + 1) as u64,
-            totalfiles: files.len() as u64,
-            filesize: meta.len(),
-            filename: filename.to_string(),
-            chmod: meta.permissions().mode(),
-            overwrite: opt.overwrite,
-        };
+        let mut header = TeleportInit::new(TeleportFeatures::Delta);
+        let mut features = TeleportFeatures::Delta as u32;
+        if opt.overwrite {
+            features |= TeleportFeatures::Overwrite as u32;
+        }
+        header.features = features;
+        header.chmod = meta.permissions().mode();
+        header.filesize = meta.len();
+        header.filename = filename.chars().collect();
 
         // Connect to server
         let addr = format!("{}:{}", opt.dest, opt.port);
@@ -126,10 +127,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             }
         };
 
-        println!(
-            "Sending file {}/{}: {:?}",
-            header.filenum, header.totalfiles, header.filename
-        );
+        println!("Sending file {}/{}: {}", num + 1, files.len(), &filename);
 
         // Send header first
         stream.write_all(&header.serialize())?;
@@ -146,26 +144,23 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         // Validate response
         match &recv.ack {
             TeleportInitStatus::Overwrite => {
-                println!("The server is overwriting the file: {}", &header.filename)
+                println!("The server is overwriting the file: {:?}", &filename)
             }
             TeleportInitStatus::NoOverwrite => {
-                println!(
-                    "The server refused to overwrite the file: {}",
-                    &header.filename
-                );
+                println!("The server refused to overwrite the file: {:?}", &filename);
                 continue;
             }
             TeleportInitStatus::NoPermission => {
                 println!(
-                    "The server does not have permission to write to this file: {}",
-                    &header.filename
+                    "The server does not have permission to write to this file: {:?}",
+                    &filename
                 );
                 continue;
             }
             TeleportInitStatus::NoSpace => {
                 println!(
-                    "The server has no space available to write the file: {}",
-                    &header.filename
+                    "The server has no space available to write the file: {:?}",
+                    &filename
                 );
                 continue;
             }

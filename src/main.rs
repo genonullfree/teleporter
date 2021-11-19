@@ -53,18 +53,6 @@ const PROTOCOL: &str = "TELEPORT";
 const PROTOCOL_NEXT: u64 = 0x54524f50454c4554;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Debug)]
-pub struct TeleportInit {
-    protocol: String,
-    version: String,
-    filename: String,
-    filenum: u64,
-    totalfiles: u64,
-    filesize: u64,
-    chmod: u32,
-    overwrite: bool,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct TeleportInitAck {
     ack: TeleportInitStatus,

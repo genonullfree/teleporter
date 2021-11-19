@@ -1,3 +1,4 @@
+use crate::teleport::TeleportInit;
 use crate::teleport::{TeleportAction, TeleportEnc, TeleportHeader};
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -106,7 +107,8 @@ pub fn recv_packet(
 
     // Include IV size in length
     let mut total_len = 13 + packet_len as usize;
-    if action & TeleportAction::Encrypted as u8 == TeleportAction::Encrypted as u8 {
+    let encrypted = action & TeleportAction::Encrypted as u8 == TeleportAction::Encrypted as u8;
+    if encrypted {
         total_len += 12;
     }
 
@@ -117,6 +119,12 @@ pub fn recv_packet(
 
     let mut out = TeleportHeader::new(TeleportAction::Init);
     out.deserialize(buf)?;
+
+    if encrypted {
+        if let Some(ctx) = dec {
+            out.data = ctx.decrypt(&out.iv.unwrap(), &out.data)?;
+        }
+    }
 
     Ok(out)
 }
@@ -244,107 +252,6 @@ fn validate_checksum(input: &[u8]) -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-impl TeleportInit {
-    pub fn new() -> TeleportInit {
-        TeleportInit {
-            protocol: PROTOCOL.to_string(),
-            version: VERSION.to_string(),
-            filename: "".to_string(),
-            filenum: 0,
-            totalfiles: 0,
-            filesize: 0,
-            chmod: 0,
-            overwrite: false,
-        }
-    }
-
-    pub fn serialize(&self) -> Vec<u8> {
-        let mut out = Vec::<u8>::new();
-        let size: u32 = self.size() as u32 + 5; // sizeof(struct) + 1csum + 4len
-        out.append(&mut size.to_le_bytes().to_vec());
-        out.append(&mut self.protocol.clone().into_bytes());
-        out.push(0);
-        out.append(&mut self.version.clone().into_bytes());
-        out.push(0);
-        out.append(&mut self.filename.clone().into_bytes().to_vec());
-        out.push(0);
-        out.append(&mut self.filenum.to_le_bytes().to_vec());
-        out.append(&mut self.totalfiles.to_le_bytes().to_vec());
-        out.append(&mut self.filesize.to_le_bytes().to_vec());
-        out.append(&mut self.chmod.to_le_bytes().to_vec());
-        let bbyte = TeleportInit::bool_to_u8(self.overwrite);
-        out.push(bbyte);
-        out.push(generate_checksum(&out));
-        out
-    }
-
-    pub fn size(&self) -> usize {
-        let mut out: usize = 0;
-        out += self.protocol.len() + 1;
-        out += self.version.len() + 1;
-        out += 8; // filenum
-        out += 8; // totalfiles
-        out += 8; // filesize
-        out += self.filename.len() + 1;
-        out += 4; // chmod
-        out += 1; // overwrite
-        out
-    }
-
-    fn bool_to_u8(b: bool) -> u8 {
-        if b {
-            1
-        } else {
-            0
-        }
-    }
-
-    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
-        validate_checksum(&input)?;
-        let mut buf: &[u8] = &input;
-        let size = buf.read_u32::<LittleEndian>().unwrap() as usize;
-        if input.len() < size {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Not enough data received",
-            ));
-        }
-        let mut ofs = 4;
-        self.protocol = vec_to_string(&input[ofs..]);
-        ofs += self.protocol.len() + 1;
-        self.version = vec_to_string(&input[ofs..]);
-        ofs += self.version.len() + 1;
-        self.filename = vec_to_string(&input[ofs..]);
-        ofs += self.filename.len() + 1;
-        let mut buf: &[u8] = &input[ofs..];
-        self.filenum = buf.read_u64::<LittleEndian>().unwrap();
-        self.totalfiles = buf.read_u64::<LittleEndian>().unwrap();
-        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
-        self.chmod = buf.read_u32::<LittleEndian>().unwrap();
-        self.overwrite = buf.read_u8().unwrap() > 0;
-        Ok(())
-    }
-}
-
-impl Default for TeleportInit {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PartialEq for TeleportInit {
-    fn eq(&self, other: &Self) -> bool {
-        self.protocol == other.protocol
-            && self.version == other.version
-            && self.filename == other.filename
-            && self.filenum == other.filenum
-            && self.totalfiles == other.totalfiles
-            && self.filesize == other.filesize
-            && self.chmod == other.chmod
-            && self.overwrite == other.overwrite
-    }
 }
 
 impl TryFrom<u8> for TeleportInitStatus {
@@ -509,39 +416,6 @@ mod tests {
         let s = update_units(pe, te);
         assert_eq!(s.partial.unit, 'B');
         assert_eq!(s.total.unit, 'T');
-    }
-
-    #[test]
-    fn test_teleportinit_serialize() {
-        let t: TeleportInit = TeleportInit {
-            protocol: PROTOCOL.to_string(),
-            version: "0.2.2".to_string(),
-            filename: "testfile.bin".to_string(),
-            filenum: 1,
-            totalfiles: 999,
-            filesize: 9001,
-            chmod: 00755,
-            overwrite: true,
-        };
-        let s = t.serialize();
-        assert_eq!(s, TESTINIT);
-    }
-
-    #[test]
-    fn test_teleportinit_deserialize() {
-        let t: TeleportInit = TeleportInit {
-            protocol: PROTOCOL.to_string(),
-            version: "0.2.2".to_string(),
-            filename: "testfile.bin".to_string(),
-            filenum: 1,
-            totalfiles: 999,
-            filesize: 9001,
-            chmod: 00755,
-            overwrite: true,
-        };
-        let mut te = TeleportInit::new();
-        te.deserialize(TESTINIT.to_vec()).unwrap();
-        assert_eq!(te, t);
     }
 
     #[test]

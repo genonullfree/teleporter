@@ -214,12 +214,12 @@ impl TeleportEnc {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TeleportInit {
-    version: [u16; 3],
-    features: u32,
-    chmod: u32,
-    filesize: u64,
-    filename_len: u16,
-    filename: Vec<char>,
+    pub version: [u16; 3],
+    pub features: u32,
+    pub chmod: u32,
+    pub filesize: u64,
+    pub filename_len: u16,
+    pub filename: Vec<char>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -249,7 +249,7 @@ impl TeleportInit {
         }
     }
 
-    pub fn serialize(self) -> Vec<u8> {
+    pub fn serialize(&self) -> Vec<u8> {
         let mut out = Vec::<u8>::new();
 
         // Add version

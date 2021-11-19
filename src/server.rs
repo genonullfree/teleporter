@@ -1,3 +1,5 @@
+use crate::teleport::TeleportFeatures;
+use crate::teleport::TeleportInit;
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use std::fs;
@@ -52,29 +54,6 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
     io::stdout().flush().unwrap();
 }
 
-fn compare_versions(recv: &str, have: &str) -> bool {
-    let mut ours = Vec::<&str>::new();
-    for i in recv.split('.') {
-        ours.push(i);
-    }
-
-    let _ = ours.pop();
-
-    let mut theirs = Vec::<&str>::new();
-    for i in have.split('.') {
-        theirs.push(i);
-    }
-
-    let _ = theirs.pop();
-
-    let same = ours
-        .iter()
-        .zip(theirs.iter())
-        .filter(|&(a, b)| a == b)
-        .count();
-    same == theirs.len() && same == ours.len()
-}
-
 /// Recv receives filenames and file data for a file
 fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(), Error> {
     let start_time = Instant::now();
@@ -85,58 +64,60 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let mut name_buf: [u8; 4096] = [0; 4096];
     let len = stream.read(&mut name_buf)?;
     let fix = &name_buf[..len];
-    let mut header = TeleportInit::new();
-    if header.deserialize(fix.to_vec()).is_err() {
+    let mut header = TeleportInit::new(TeleportFeatures::NewFile);
+    if header.deserialize(&fix.to_vec()).is_err() {
         return Err(Error::new(
             ErrorKind::InvalidData,
             "Data received did not match expected",
         ));
     };
 
-    let compatible = compare_versions(&header.version, &VERSION.to_string());
+    let mut filename: String = header.filename.iter().cloned().collect::<String>();
 
-    if header.protocol != *PROTOCOL || !compatible {
+    let version = Version::parse(VERSION).unwrap();
+    let compatible =
+        { version.major as u16 == header.version[0] && version.minor as u16 == header.version[1] };
+
+    if !compatible {
         println!(
-            "Error: Version mismatch from: {:?}! Us: {}:{} Client: {}:{}",
-            ip, PROTOCOL, VERSION, header.protocol, header.version
+            "Error: Version mismatch from: {:?}! Us:{} Client:{:?}",
+            ip, VERSION, header.version
         );
         let resp = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
         return send_ack(resp, &stream);
     }
 
     // Remove any preceeding '/'
-    if header.filename.starts_with('/') {
-        header.filename.remove(0);
+    if filename.starts_with('/') {
+        filename.remove(0);
     }
 
     // Prohibit directory traversal
-    header.filename = header.filename.replace("../", "");
+    filename = filename.replace("../", "");
 
     // Test if overwrite is false and file exists
-    if !header.overwrite && Path::new(&header.filename).exists() {
-        println!(" => Refusing to overwrite file: {}", &header.filename);
+    if header.features & TeleportFeatures::Overwrite as u32 != TeleportFeatures::Overwrite as u32
+        && Path::new(&filename).exists()
+    {
+        println!(" => Refusing to overwrite file: {:?}", &filename);
         let resp = TeleportInitAck::new(TeleportInitStatus::NoOverwrite);
         return send_ack(resp, &stream);
     }
 
     // Create recursive dirs
-    if fs::create_dir_all(Path::new(&header.filename).parent().unwrap()).is_err() {
-        println!("Error: unable to create directories: {}", &header.filename);
+    if fs::create_dir_all(Path::new(&filename).parent().unwrap()).is_err() {
+        println!("Error: unable to create directories: {:?}", &filename);
         let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
         return send_ack(resp, &stream);
     };
 
     // Open file for writing
-    file = match OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&header.filename)
-    {
+    file = match OpenOptions::new().read(true).write(true).open(&filename) {
         Ok(f) => f,
-        Err(_) => match File::create(&header.filename) {
+        Err(_) => match File::create(&filename) {
             Ok(f) => f,
             Err(_) => {
-                println!("Error: unable to create file: {}", &header.filename);
+                println!("Error: unable to create file: {:?}", &filename);
                 let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
                 return send_ack(resp, &stream);
             }
@@ -145,7 +126,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let meta = file.metadata()?;
     let mut perms = meta.permissions();
     perms.set_mode(header.chmod);
-    if fs::set_permissions(&header.filename, perms).is_err() {
+    if fs::set_permissions(&filename, perms).is_err() {
         println!("Could not set file permissions");
         let resp = TeleportInitAck::new(TeleportInitStatus::NoPermission);
         return send_ack(resp, &stream);
@@ -171,7 +152,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     send_ack(resp, &stream)?;
 
     let mut recv_data = recv_list.lock().unwrap();
-    recv_data.push(header.filename.clone());
+    recv_data.push(filename.clone());
     print_list(&recv_data);
     drop(recv_data);
 
@@ -197,11 +178,11 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
                 let speed =
                     (header.filesize as f64 * 8.0) / duration.as_secs() as f64 / 1024.0 / 1024.0;
                 println!(
-                    " => Received file: {} (from: {:?} v{}) ({:.2?} @ {:.3} Mbps)",
-                    &header.filename, ip, &header.version, duration, speed
+                    " => Received file: {:?} (from: {:?} v{:?}) ({:.2?} @ {:.3} Mbps)",
+                    &filename, ip, &header.version, duration, speed
                 );
             } else {
-                println!(" => Error receiving: {}", &header.filename);
+                println!(" => Error receiving: {:?}", &filename);
             }
             break;
         }
@@ -217,8 +198,8 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
 
         if chunk.length as usize != wrote {
             println!(
-                "Error writing to file: {} (read: {}, wrote: {}). Out of space?",
-                &header.filename, chunk.length, wrote
+                "Error writing to file: {:?} (read: {}, wrote: {}). Out of space?",
+                &filename, chunk.length, wrote
             );
             break;
         }
@@ -236,7 +217,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     }
 
     let mut recv_data = recv_list.lock().unwrap();
-    recv_data.retain(|x| x != &header.filename);
+    recv_data.retain(|x| x != &filename);
     print_list(&recv_data);
     drop(recv_data);
 
