@@ -57,7 +57,7 @@ fn identify_unit(mut value: f64) -> SizeUnit {
     }
 }
 
-fn send_packet(
+pub fn send_packet(
     sock: &mut TcpStream,
     action: TeleportAction,
     enc: Option<TeleportEnc>,
@@ -86,6 +86,39 @@ fn send_packet(
     sock.write_all(&message)?;
 
     Ok(())
+}
+
+pub fn recv_packet(
+    sock: &mut TcpStream,
+    dec: Option<TeleportEnc>,
+) -> Result<TeleportHeader, Error> {
+    let mut initbuf: [u8; 13] = [0; 13];
+    sock.peek(&mut initbuf)?;
+
+    let mut init: &[u8] = &initbuf;
+    let protocol = init.read_u64::<LittleEndian>().unwrap();
+    if protocol != PROTOCOL_NEXT {
+        return Err(Error::new(ErrorKind::InvalidData, "Invalid protocol"));
+    }
+
+    let packet_len = init.read_u32::<LittleEndian>().unwrap();
+    let action = init.read_u8().unwrap();
+
+    // Include IV size in length
+    let mut total_len = 13 + packet_len as usize;
+    if action & TeleportAction::Encrypted as u8 == TeleportAction::Encrypted as u8 {
+        total_len += 12;
+    }
+
+    let mut buf = Vec::<u8>::new();
+    buf.resize(total_len, 0);
+
+    sock.read_exact(&mut buf)?;
+
+    let mut out = TeleportHeader::new(TeleportAction::Init);
+    out.deserialize(buf)?;
+
+    Ok(out)
 }
 
 fn gen_chunk_size(file_size: u64) -> usize {
