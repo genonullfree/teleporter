@@ -51,6 +51,10 @@ pub struct Opt {
     /// Disable delta transfer (overwrite always overwrites completely)
     #[structopt(short, long)]
     no_delta: bool,
+
+    /// Keep path info (recreate directory path on remote server)
+    #[structopt(short, long)]
+    keep_path: bool,
 }
 
 const PROTOCOL: u64 = 0x54524f50454c4554;

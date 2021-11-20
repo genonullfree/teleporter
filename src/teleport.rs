@@ -447,6 +447,13 @@ impl TeleportDelta {
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
         let mut buf: &[u8] = input;
 
+        if input.len() < 50 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Not enough data for Delta deserialize",
+            ));
+        }
+
         self.filesize = buf.read_u64::<LittleEndian>().unwrap();
 
         // Extract file hash

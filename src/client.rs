@@ -80,17 +80,15 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         let thread_file = filepath.clone().to_string();
-        let handle = match opt.overwrite {
+        let handle = match opt.overwrite && !opt.no_delta {
             true => Some(thread::spawn(move || {
                 utils::calc_file_hash(thread_file).unwrap()
             })),
             false => None,
         };
 
-        // Remove '/' root if exists
-        if opt.recursive && filepath.starts_with('/') {
-            filename.remove(0);
-        } else if !opt.recursive {
+        // Remove all path info if !opt.keep_path
+        if !opt.keep_path {
             filename = Path::new(item)
                 .file_name()
                 .unwrap()
@@ -108,7 +106,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         if opt.overwrite {
             features |= TeleportFeatures::Overwrite as u32;
         }
-        header.features |= features;
+        header.features = features;
         header.chmod = meta.permissions().mode();
         header.filesize = meta.len();
         header.filename = filename.chars().collect();
@@ -173,15 +171,13 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
         let csum_recv = recv.delta.as_ref().map(|r| r.checksum);
         let mut checksum: Option<Hash> = None;
-        if let Some(feat) = recv.features {
-            if feat & TeleportFeatures::Overwrite as u32 == TeleportFeatures::Overwrite as u32 {
-                checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
-            }
+        if utils::check_feature(&recv.features, TeleportFeatures::Overwrite) {
+            checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 
         if checksum != None && checksum == csum_recv {
             // File matches hash
-            send_delta_complete(stream, file)?;
+            send_data_complete(stream, file)?;
         } else {
             // Send file data
             send(stream, file, &header, recv.delta)?;
@@ -194,7 +190,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     Ok(())
 }
 
-fn send_delta_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
+fn send_data_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
     let meta = file.metadata()?;
 
     let mut chunk = TeleportData {
@@ -266,7 +262,7 @@ fn send(
         print_updates(sent as f64, header);
     }
 
-    send_delta_complete(stream, file)?;
+    send_data_complete(stream, file)?;
 
     Ok(())
 }

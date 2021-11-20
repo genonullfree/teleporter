@@ -1,5 +1,5 @@
 use crate::teleport::TeleportInit;
-use crate::teleport::{TeleportAction, TeleportEnc, TeleportHeader};
+use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportHeader};
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
@@ -97,12 +97,16 @@ pub fn recv_packet(
     dec: Option<TeleportEnc>,
 ) -> Result<TeleportHeader, Error> {
     let mut initbuf: [u8; 13] = [0; 13];
-    sock.peek(&mut initbuf)?;
+    loop {
+        let len = sock.peek(&mut initbuf)?;
+        if len == 13 {
+            break;
+        }
+    }
 
     let mut init: &[u8] = &initbuf;
     let protocol = init.read_u64::<LittleEndian>().unwrap();
     if protocol != PROTOCOL {
-        println!("protocol recv: {:08x?}", protocol);
         return Err(Error::new(ErrorKind::InvalidData, "Invalid protocol"));
     }
 
@@ -146,6 +150,7 @@ fn gen_chunk_size(file_size: u64) -> usize {
     chunk as usize
 }
 
+// Called from client
 pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
     let mut hasher = blake3::Hasher::new();
     let mut buf = Vec::<u8>::new();
@@ -175,6 +180,28 @@ pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
     Ok(hasher.finalize())
 }
 
+pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), Error> {
+    if let Some(o) = opt {
+        *o |= add as u32;
+        *opt = Some(*o);
+    } else {
+        *opt = Some(add as u32);
+    }
+
+    Ok(())
+}
+
+pub fn check_feature(opt: &Option<u32>, check: TeleportFeatures) -> bool {
+    if let Some(o) = opt {
+        if o & check as u32 == check as u32 {
+            return true;
+        }
+    }
+
+    false
+}
+
+// Called from server
 pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error> {
     let meta = file.metadata()?;
     let file_size = meta.len();

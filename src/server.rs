@@ -1,6 +1,6 @@
 use crate::teleport::*;
-use crate::teleport::{TeleportDelta, TeleportInit, TeleportInitAck};
 use crate::teleport::{TeleportFeatures, TeleportStatus};
+use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::*;
 use std::fs;
 use std::fs::OpenOptions;
@@ -126,21 +126,19 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
 
     // Send ready for data ACK
     let mut resp = TeleportInitAck::new(TeleportStatus::Proceed);
-    resp.features = Some(features);
+    utils::add_feature(&mut resp.features, TeleportFeatures::NewFile)?;
 
     // If overwrite and file exists, build TeleportDelta
-    let mut chunk_size = 5120;
     file.set_len(header.filesize)?;
-    if meta.len() > 0 && features & TeleportFeatures::Delta as u32 == TeleportFeatures::Delta as u32
-    {
-        resp.features = Some(resp.features.unwrap_or(0) | TeleportFeatures::Overwrite as u32);
-        resp.delta = match utils::calc_delta_hash(&file) {
-            Ok(d) => {
-                chunk_size = d.chunk_size + 1024;
-                Some(d)
-            }
-            _ => None,
-        };
+    if meta.len() > 0 {
+        utils::add_feature(&mut resp.features, TeleportFeatures::Overwrite)?;
+        if features & TeleportFeatures::Delta as u32 == TeleportFeatures::Delta as u32 {
+            utils::add_feature(&mut resp.features, TeleportFeatures::Delta)?;
+            resp.delta = match utils::calc_delta_hash(&file) {
+                Ok(d) => Some(d),
+                _ => None,
+            };
+        }
     }
 
     send_ack(resp, &mut stream)?;
@@ -152,8 +150,6 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
 
     // Receive file data
     let mut received: u64 = 0;
-    let mut data = Vec::<u8>::new();
-    data.resize(chunk_size as usize, 0);
     loop {
         // Read from network connection
         let packet = utils::recv_packet(&mut stream, None)?;
