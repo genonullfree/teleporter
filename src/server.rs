@@ -41,9 +41,13 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     Ok(())
 }
 
-fn send_ack(ack: TeleportInitAck, mut stream: &mut TcpStream) -> Result<(), Error> {
+fn send_ack(
+    ack: TeleportInitAck,
+    mut stream: &mut TcpStream,
+    enc: &Option<TeleportEnc>,
+) -> Result<(), Error> {
     // Encode and send response
-    utils::send_packet(&mut stream, TeleportAction::InitAck, None, ack.serialize())
+    utils::send_packet(&mut stream, TeleportAction::InitAck, enc, ack.serialize())
 }
 
 fn print_list(list: &MutexGuard<Vec<String>>) {
@@ -57,11 +61,25 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let ip = stream.peer_addr().unwrap();
     let mut file: File;
 
+    let mut enc: Option<TeleportEnc> = None;
+
     // Receive header first
-    let packet = utils::recv_packet(&mut stream, None)?;
+    let mut packet = utils::recv_packet(&mut stream, &None)?;
+    if packet.action == TeleportAction::Ecdh as u8 {
+        let mut ctx = TeleportEnc::new();
+        ctx.deserialize(&packet.data)?;
+        utils::send_packet(&mut stream, TeleportAction::EcdhAck, &None, ctx.serialize())?;
+        enc = Some(ctx);
+        packet = utils::recv_packet(&mut stream, &enc)?;
+    }
 
     let mut header = TeleportInit::new(TeleportFeatures::NewFile);
-    header.deserialize(&packet.data)?;
+    if packet.action == TeleportAction::Init as u8 {
+        header.deserialize(&packet.data)?;
+    } else {
+        let resp = TeleportInitAck::new(TeleportStatus::EncryptionError);
+        return send_ack(resp, &mut stream, &enc);
+    }
 
     let mut filename: String = header.filename.iter().cloned().collect::<String>();
     let features: u32 = header.features;
@@ -76,7 +94,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
             ip, VERSION, header.version
         );
         let resp = TeleportInitAck::new(TeleportStatus::WrongVersion);
-        return send_ack(resp, &mut stream);
+        return send_ack(resp, &mut stream, &enc);
     }
 
     // Remove any preceeding '/'
@@ -93,14 +111,14 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     {
         println!(" => Refusing to overwrite file: {:?}", &filename);
         let resp = TeleportInitAck::new(TeleportStatus::NoOverwrite);
-        return send_ack(resp, &mut stream);
+        return send_ack(resp, &mut stream, &enc);
     }
 
     // Create recursive dirs
     if fs::create_dir_all(Path::new(&filename).parent().unwrap()).is_err() {
         println!("Error: unable to create directories: {:?}", &filename);
         let resp = TeleportInitAck::new(TeleportStatus::NoPermission);
-        return send_ack(resp, &mut stream);
+        return send_ack(resp, &mut stream, &enc);
     };
 
     // Open file for writing
@@ -111,7 +129,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
             Err(_) => {
                 println!("Error: unable to create file: {:?}", &filename);
                 let resp = TeleportInitAck::new(TeleportStatus::NoPermission);
-                return send_ack(resp, &mut stream);
+                return send_ack(resp, &mut stream, &enc);
             }
         },
     };
@@ -121,7 +139,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     if fs::set_permissions(&filename, perms).is_err() {
         println!("Could not set file permissions");
         let resp = TeleportInitAck::new(TeleportStatus::NoPermission);
-        return send_ack(resp, &mut stream);
+        return send_ack(resp, &mut stream, &enc);
     };
 
     // Send ready for data ACK
@@ -141,7 +159,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         }
     }
 
-    send_ack(resp, &mut stream)?;
+    send_ack(resp, &mut stream, &enc)?;
 
     let mut recv_data = recv_list.lock().unwrap();
     recv_data.push(filename.clone());
@@ -152,7 +170,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let mut received: u64 = 0;
     loop {
         // Read from network connection
-        let packet = utils::recv_packet(&mut stream, None)?;
+        let packet = utils::recv_packet(&mut stream, &enc)?;
         let mut chunk = TeleportData::new();
         chunk.deserialize(&packet.data)?;
 

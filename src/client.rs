@@ -67,6 +67,8 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     for (num, item) in files.iter().enumerate() {
         let start_time = Instant::now();
 
+        let mut enc: Option<TeleportEnc> = None;
+
         let filepath = item;
         let mut filename = filepath.clone().to_string();
 
@@ -129,13 +131,23 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             }
         };
 
+        if opt.encrypt {
+            let mut ctx = TeleportEnc::new();
+            utils::send_packet(&mut stream, TeleportAction::Ecdh, &None, ctx.serialize())?;
+            let packet = utils::recv_packet(&mut stream, &None)?;
+            if packet.action == TeleportAction::EcdhAck as u8 {
+                ctx.deserialize(&packet.data)?;
+                enc = Some(ctx);
+            }
+        }
+
         println!("Sending file {}/{}: {}", num + 1, files.len(), &filename);
 
         // Send header first
-        utils::send_packet(&mut stream, TeleportAction::Init, None, header.serialize())?;
+        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.serialize())?;
 
         // Receive response from server
-        let packet = utils::recv_packet(&mut stream, None)?;
+        let packet = utils::recv_packet(&mut stream, &enc)?;
         let mut recv = TeleportInitAck::new(TeleportStatus::UnknownAction);
         recv.deserialize(&packet.data)?;
 
@@ -166,6 +178,10 @@ pub fn run(opt: Opt) -> Result<(), Error> {
                 );
                 break;
             }
+            TeleportStatus::EncryptionError => {
+                println!("Error initializing encryption handshake");
+                break;
+            }
             _ => (),
         };
 
@@ -177,10 +193,10 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
         if checksum != None && checksum == csum_recv {
             // File matches hash
-            send_data_complete(stream, file)?;
+            send_data_complete(stream, &enc, file)?;
         } else {
             // Send file data
-            send(stream, file, &header, recv.delta)?;
+            send(stream, file, &header, &enc, recv.delta)?;
         }
 
         let duration = start_time.elapsed();
@@ -190,7 +206,11 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     Ok(())
 }
 
-fn send_data_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
+fn send_data_complete(
+    mut stream: TcpStream,
+    enc: &Option<TeleportEnc>,
+    file: File,
+) -> Result<(), Error> {
     let meta = file.metadata()?;
 
     let mut chunk = TeleportData {
@@ -200,7 +220,7 @@ fn send_data_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
     };
 
     // Send the data chunk
-    utils::send_packet(&mut stream, TeleportAction::Data, None, chunk.serialize())?;
+    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize())?;
 
     Ok(())
 }
@@ -210,6 +230,7 @@ fn send(
     mut stream: TcpStream,
     mut file: File,
     header: &TeleportInit,
+    enc: &Option<TeleportEnc>,
     delta: Option<TeleportDelta>,
 ) -> Result<(), Error> {
     let mut buf = Vec::<u8>::new();
@@ -256,13 +277,13 @@ fn send(
         };
 
         // Send the data chunk
-        utils::send_packet(&mut stream, TeleportAction::Data, None, chunk.serialize())?;
+        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize())?;
 
         sent += len;
         print_updates(sent as f64, header);
     }
 
-    send_data_complete(stream, file)?;
+    send_data_complete(stream, enc, file)?;
 
     Ok(())
 }

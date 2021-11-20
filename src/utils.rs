@@ -61,7 +61,7 @@ fn identify_unit(mut value: f64) -> SizeUnit {
 pub fn send_packet(
     sock: &mut TcpStream,
     action: TeleportAction,
-    enc: Option<TeleportEnc>,
+    enc: &Option<TeleportEnc>,
     data: Vec<u8>,
 ) -> Result<(), Error> {
     let mut header = TeleportHeader::new(action);
@@ -72,6 +72,8 @@ pub fn send_packet(
         let mut rng = StdRng::from_entropy();
         let mut iv: [u8; 12] = [0; 12];
         rng.fill(&mut iv);
+
+        header.action |= TeleportAction::Encrypted as u8;
 
         // Encrypt the data array
         header.data = ctx.encrypt(&iv, &data)?;
@@ -94,7 +96,7 @@ pub fn send_packet(
 
 pub fn recv_packet(
     sock: &mut TcpStream,
-    dec: Option<TeleportEnc>,
+    dec: &Option<TeleportEnc>,
 ) -> Result<TeleportHeader, Error> {
     let mut initbuf: [u8; 13] = [0; 13];
     loop {
@@ -129,6 +131,7 @@ pub fn recv_packet(
     out.deserialize(buf)?;
 
     if encrypted {
+        out.action ^= TeleportAction::Encrypted as u8;
         if let Some(ctx) = dec {
             out.data = ctx.decrypt(&out.iv.unwrap(), &out.data)?;
         }

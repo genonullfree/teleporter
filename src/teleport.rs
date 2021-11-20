@@ -1,11 +1,10 @@
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
-use rand::prelude::*;
 
 #[derive(Debug, PartialEq)]
 pub struct TeleportHeader {
     protocol: u64,
-    action: u8,
+    pub action: u8,
     pub iv: Option<[u8; 12]>,
     pub data: Vec<u8>,
 }
@@ -14,8 +13,8 @@ pub struct TeleportHeader {
 pub enum TeleportAction {
     Init = 0x01,
     InitAck = 0x02,
-    TxFile = 0x10,
-    RxFile = 0x20,
+    Ecdh = 0x04,
+    EcdhAck = 0x08,
     Data = 0x40,
     Encrypted = 0x80,
 }
@@ -169,8 +168,6 @@ pub enum TeleportFeatures {
     NewFile = 0x01,
     Delta = 0x02,
     Overwrite = 0x04,
-    Backup = 0x08,
-    Rename = 0x10,
 }
 
 impl TeleportInit {
@@ -267,6 +264,7 @@ pub enum TeleportStatus {
     NoSpace,
     NoPermission,
     WrongVersion,
+    EncryptionError,
     UnknownAction,
 }
 
@@ -280,6 +278,7 @@ impl TryFrom<u8> for TeleportStatus {
             x if x == TeleportStatus::NoSpace as u8 => Ok(TeleportStatus::NoSpace),
             x if x == TeleportStatus::NoPermission as u8 => Ok(TeleportStatus::NoPermission),
             x if x == TeleportStatus::WrongVersion as u8 => Ok(TeleportStatus::WrongVersion),
+            x if x == TeleportStatus::EncryptionError as u8 => Ok(TeleportStatus::EncryptionError),
             x if x == TeleportStatus::UnknownAction as u8 => Ok(TeleportStatus::UnknownAction),
             _ => Err(Error::new(
                 ErrorKind::InvalidData,
@@ -531,6 +530,7 @@ impl TeleportData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::prelude::*;
 
     const TESTHEADER: &[u8] = &[
         84, 69, 76, 69, 80, 79, 82, 84, 17, 0, 0, 0, 129, 5, 48, 46, 50, 46, 51, 0, 246, 9, 10, 11,
@@ -547,7 +547,7 @@ mod tests {
         5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 21, 205, 91, 7, 0, 0, 0, 0, 0, 0,
     ];
     const TESTDATAPKT: &[u8] = &[49, 212, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 1, 2, 3, 4, 5];
-    const TESTINITACK: &[u8] = &[0, 0, 0, 6, 0, 0, 0, 17, 0, 0, 0];
+    const TESTINITACK: &[u8] = &[0, 0, 0, 6, 0, 0, 0, 5, 0, 0, 0];
 
     #[test]
     fn test_teleportheader_serialize() {
@@ -692,7 +692,7 @@ mod tests {
     #[test]
     fn test_teleportinitack_serialize() {
         let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
-        let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Rename as u32;
+        let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
         let out = test.serialize();
 
@@ -702,7 +702,7 @@ mod tests {
     #[test]
     fn test_teleportinitack_deserialize() {
         let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
-        let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Rename as u32;
+        let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
 
         let mut t = TeleportInitAck::new(TeleportStatus::Proceed);
