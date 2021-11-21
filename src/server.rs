@@ -18,10 +18,16 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         }
     };
 
+    // Print welcome banner
     println!(
         "Teleporter Server {} listening for connections on 0.0.0.0:{}",
         VERSION, &opt.port
     );
+
+    // Print warning banner for dangerous options
+    if opt.allow_dangerous_filepath {
+        println!("Warning: `--allow-dangerous-filepath` is ENABLED. This is a potentially dangerous option, use at your own risk!");
+    }
 
     let recv_list = Arc::new(Mutex::new(Vec::<String>::new()));
 
@@ -34,7 +40,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         // Receive connections in recv function
         let recv_list_clone = Arc::clone(&recv_list);
         thread::spawn(move || {
-            recv(s, recv_list_clone).unwrap();
+            recv(s, recv_list_clone, &opt.allow_dangerous_filepath).unwrap();
         });
     }
 
@@ -67,7 +73,11 @@ fn rm_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
 }
 
 /// Recv receives filenames and file data for a file
-fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(), Error> {
+fn recv(
+    mut stream: TcpStream,
+    recv_list: Arc<Mutex<Vec<String>>>,
+    allow_dangerous_filepath: &bool,
+) -> Result<(), Error> {
     let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
     let mut file: File;
@@ -108,13 +118,13 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         return send_ack(resp, &mut stream, &enc);
     }
 
-    // Remove any preceeding '/'
-    if filename.starts_with('/') {
+    if !allow_dangerous_filepath && filename.starts_with('/') {
+        // Remove any preceeding '/'
         filename.remove(0);
-    }
 
-    // Prohibit directory traversal
-    filename = filename.replace("../", "");
+        // Prohibit directory traversal
+        filename = filename.replace("../", "");
+    }
 
     // Test if overwrite is false and file exists
     if features & TeleportFeatures::Overwrite as u32 != TeleportFeatures::Overwrite as u32

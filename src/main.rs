@@ -55,6 +55,10 @@ pub struct Opt {
     /// Keep path info (recreate directory path on remote server)
     #[structopt(short, long)]
     keep_path: bool,
+
+    /// Allow absolute and relative file paths for transfers (server only) [WARNING: potentially dangerous option, use at your own risk!]
+    #[structopt(long)]
+    allow_dangerous_filepath: bool,
 }
 
 const PROTOCOL: u64 = 0x54524f50454c4554;
