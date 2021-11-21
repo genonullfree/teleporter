@@ -59,6 +59,13 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
     io::stdout().flush().unwrap();
 }
 
+fn rm_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
+    let mut recv_data = list.lock().unwrap();
+    recv_data.retain(|x| x != filename);
+    print_list(&recv_data);
+    drop(recv_data);
+}
+
 /// Recv receives filenames and file data for a file
 fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(), Error> {
     let start_time = Instant::now();
@@ -169,13 +176,32 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         }
     }
 
-    send_ack(resp, &mut stream, &enc)?;
+    match send_ack(resp, &mut stream, &enc) {
+        Ok(_) => (),
+        Err(e) => {
+            println!(
+                "Connection closed (reason: {:?}). Aborted {} transfer.",
+                e, &filename
+            );
+            rm_list(&filename, &recv_list);
+            return Ok(());
+        }
+    }
 
     // Receive file data
     let mut received: u64 = 0;
     loop {
         // Read from network connection
-        let packet = utils::recv_packet(&mut stream, &enc)?;
+        let packet = match utils::recv_packet(&mut stream, &enc) {
+            Ok(s) => s,
+            Err(e) => {
+                println!(
+                    "Connection closed (reason: {:?}). Aborted {} transfer.",
+                    e, &filename
+                );
+                break;
+            }
+        };
         let mut chunk = TeleportData::new();
         chunk.deserialize(&packet.data)?;
 
@@ -222,10 +248,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
         }
     }
 
-    let mut recv_data = recv_list.lock().unwrap();
-    recv_data.retain(|x| x != &filename);
-    print_list(&recv_data);
-    drop(recv_data);
+    rm_list(&filename, &recv_list);
 
     Ok(())
 }
