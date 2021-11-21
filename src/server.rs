@@ -51,7 +51,11 @@ fn send_ack(
 }
 
 fn print_list(list: &MutexGuard<Vec<String>>) {
-    print!("\rReceiving: {:?}", list);
+    if list.len() == 0 {
+        print!("\rListening...");
+    } else {
+        print!("\rReceiving: {:?}", list);
+    }
     io::stdout().flush().unwrap();
 }
 
@@ -146,6 +150,12 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     let mut resp = TeleportInitAck::new(TeleportStatus::Proceed);
     utils::add_feature(&mut resp.features, TeleportFeatures::NewFile)?;
 
+    // Add file to list
+    let mut recv_data = recv_list.lock().unwrap();
+    recv_data.push(filename.clone());
+    print_list(&recv_data);
+    drop(recv_data);
+
     // If overwrite and file exists, build TeleportDelta
     file.set_len(header.filesize)?;
     if meta.len() > 0 {
@@ -160,11 +170,6 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>) -> Result<(),
     }
 
     send_ack(resp, &mut stream, &enc)?;
-
-    let mut recv_data = recv_list.lock().unwrap();
-    recv_data.push(filename.clone());
-    print_list(&recv_data);
-    drop(recv_data);
 
     // Receive file data
     let mut received: u64 = 0;

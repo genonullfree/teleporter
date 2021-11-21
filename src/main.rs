@@ -44,11 +44,11 @@ pub struct Opt {
     #[structopt(short, long)]
     recursive: bool,
 
-    /// Encrypt the file transfer
+    /// Encrypt the file transfer using ECDH key-exchange and random keys
     #[structopt(short, long)]
     encrypt: bool,
 
-    /// Disable delta transfer (overwrite always overwrites completely)
+    /// Disable delta transfer (overwrite will transfer entire file)
     #[structopt(short, long)]
     no_delta: bool,
 

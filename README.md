@@ -18,14 +18,17 @@ USAGE:
     teleporter [FLAGS] [OPTIONS]
 
 FLAGS:
+    -e, --encrypt      Encrypt the file transfer using ECDH key-exchange and random keys
     -h, --help         Prints help information
+    -k, --keep-path    Keep path info (recreate directory path on remote server)
+    -n, --no-delta     Disable delta transfer (overwrite will transfer entire file)
     -o, --overwrite    Overwrite remote file
     -r, --recursive    Recurse into directories on send
     -V, --version      Prints version information
 
 OPTIONS:
     -d, --dest <dest>         Destination teleporter IP address [default: 127.0.0.1]
-    -i, --input <input>...    List of filepaths to files that will be teleportered [default: ]
+    -i, --input <input>...    List of filepaths to files that will be teleported [default: ]
     -p, --port <port>         Destination teleporter Port, or Port to listen on [default: 9001]
 ```
 
@@ -59,28 +62,29 @@ This will install Teleporter to `~/.cargo/bin/teleporter`, which might need to b
 ## Server (receiving from 2 different clients)
 
 ```
-$ target/debug/teleporter
-Teleporter Server listening for connections on 0.0.0.0:9001
-Receiving: ["testfile", "otherfile", "testfile2", "testfile3"] => Received file: testfile2 from: 127.0.0.1:41330
-Receiving: ["testfile", "otherfile", "testfile3", "testfile4"] => Received file: testfile3 from: 127.0.0.1:41332
-Receiving: ["testfile", "otherfile", "testfile4"] => Received file: testfile from: 127.0.0.1:41326
-Receiving: ["otherfile", "testfile4", "testfile5"] => Received file: testfile5 from: 127.0.0.1:41336
-Receiving: ["otherfile", "testfile4", "testfileB"] => Received file: testfile4 from: 127.0.0.1:41334
-Receiving: ["otherfile", "testfileB"] => Received file: testfileB from: 127.0.0.1:41340
-Receiving: ["otherfile", "testfileC"]
+$ teleporter
+Teleporter Server 0.6.0 listening for connections on 0.0.0.0:9001
+Receiving: ["archlinux-2021.11.01-x86_64.iso", "ubuntu-20.04.3-live-server-arm64.iso"] => Received file: "archlinux-2021.11.01-x86_64.iso" (from: 127.0.0.1:54708 v[0, 6, 0]) (17.67s @ 398.270 Mbps)
+Receiving: ["ubuntu-20.04.3-live-server-arm64.iso", "ArchLinuxARM-aarch64-latest.tar"] => Received file: "ubuntu-20.04.3-live-server-arm64.iso" (from: 127.0.0.1:54709 v[0, 6, 0]) (24.55s @ 390.689 Mbps)
+Receiving: ["ArchLinuxARM-aarch64-latest.tar", "laughing_man_by_geno.jpg"] => Received file: "laughing_man_by_geno.jpg" (from: 127.0.0.1:54713 v[0, 6, 0]) (952.46µs @ inf Mbps)
+Receiving: ["ArchLinuxARM-aarch64-latest.tar", "unnamed.jpg"] => Received file: "unnamed.jpg" (from: 127.0.0.1:54714 v[0, 6, 0]) (832.04µs @ inf Mbps)
+Receiving: ["ArchLinuxARM-aarch64-latest.tar"] => Received file: "ArchLinuxARM-aarch64-latest.tar" (from: 127.0.0.1:54712 v[0, 6, 0]) (27.57s @ 388.182 Mbps)
+Receiving: []
 ```
 
 ## Client (sending)
 
 ```
-$ target/debug/teleporter -i ./test/testfile ./test/testfile2 ./test/testfile3 ./test/testfile4
-Teleporter Client
-Sending file 1/4: "testfile"
- =>    2.000G of    2.000G (100.00%) done!
-Sending file 2/4: "testfile2"
- =>    4.000M of    4.000M (100.00%) done!
-Sending file 3/4: "testfile3"
- =>    4.000M of    4.000M (100.00%) done!
-Sending file 4/4: "testfile4"
- =>   20.000M of   20.000M (100.00%) done!
+$ teleporter -i ~/Downloads/*iso ~/Downloads/ArchLinuxARM-aarch64-latest.tar ~/Downloads/*jpg
+Teleporter Client 0.6.0
+Sending file 1/5: archlinux-2021.11.01-x86_64.iso
+ =>  846.324M of  846.324M (100.00%) done! Time: 17.63s Speed: 398.270 Mbps
+Sending file 2/5: ubuntu-20.04.3-live-server-arm64.iso
+ =>    1.145G of    1.145G (100.00%) done! Time: 24.51s Speed: 390.689 Mbps
+Sending file 3/5: ArchLinuxARM-aarch64-latest.tar
+ =>    1.279G of    1.279G (100.00%) done! Time: 27.54s Speed: 388.182 Mbps
+Sending file 4/5: laughing_man_by_geno.jpg
+ =>   19.230K of   19.230K (100.00%) done! Time: 1.15ms Speed: inf Mbps
+Sending file 5/5: unnamed.jpg
+ =>   16.374K of   16.374K (100.00%) done! Time: 834.29µs Speed: inf Mbps
 ```
