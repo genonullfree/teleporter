@@ -1,4 +1,5 @@
 use blake3::Hash;
+use semver::Version;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::io::{Error, ErrorKind};
@@ -14,7 +15,9 @@ use std::time::Instant;
 use structopt::StructOpt;
 
 mod client;
+mod crypto;
 mod server;
+mod teleport;
 mod utils;
 
 /// Teleporter is a simple application for sending files from Point A to Point B
@@ -40,55 +43,26 @@ pub struct Opt {
     /// Recurse into directories on send
     #[structopt(short, long)]
     recursive: bool,
+
+    /// Encrypt the file transfer using ECDH key-exchange and random keys
+    #[structopt(short, long)]
+    encrypt: bool,
+
+    /// Disable delta transfer (overwrite will transfer entire file)
+    #[structopt(short, long)]
+    no_delta: bool,
+
+    /// Keep path info (recreate directory path on remote server)
+    #[structopt(short, long)]
+    keep_path: bool,
+
+    /// Allow absolute and relative file paths for transfers (server only) [WARNING: potentially dangerous option, use at your own risk!]
+    #[structopt(long)]
+    allow_dangerous_filepath: bool,
 }
 
-const PROTOCOL: &str = "TELEPORT";
+const PROTOCOL: u64 = 0x54524f50454c4554;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
-#[derive(Debug)]
-pub struct TeleportInit {
-    protocol: String,
-    version: String,
-    filename: String,
-    filenum: u64,
-    totalfiles: u64,
-    filesize: u64,
-    chmod: u32,
-    overwrite: bool,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TeleportInitAck {
-    ack: TeleportInitStatus,
-    version: String,
-    delta: Option<TeleportDelta>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct TeleportDelta {
-    size: u64,
-    delta_size: u64,
-    csum: Hash,
-    delta_csum: Vec<Hash>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TeleportData {
-    length: u32,
-    offset: u64,
-    data: Vec<u8>,
-}
-
-/// TeleportInitStatus type when header is received and ready to receive file data or not
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum TeleportInitStatus {
-    Proceed,      // Success
-    Overwrite,    // Success, delta overwrite
-    NoOverwrite,  // Error
-    NoSpace,      // Error
-    NoPermission, // Error
-    WrongVersion, // Error
-}
 
 fn main() {
     // Process arguments

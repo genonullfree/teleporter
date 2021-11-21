@@ -1,3 +1,6 @@
+use crate::teleport::*;
+use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
+use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
 use std::path::Path;
@@ -64,6 +67,8 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     for (num, item) in files.iter().enumerate() {
         let start_time = Instant::now();
 
+        let mut enc: Option<TeleportEnc> = None;
+
         let filepath = item;
         let mut filename = filepath.clone().to_string();
 
@@ -77,17 +82,15 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         };
 
         let thread_file = filepath.clone().to_string();
-        let handle = match opt.overwrite {
+        let handle = match opt.overwrite && !opt.no_delta {
             true => Some(thread::spawn(move || {
                 utils::calc_file_hash(thread_file).unwrap()
             })),
             false => None,
         };
 
-        // Remove '/' root if exists
-        if opt.recursive && filepath.starts_with('/') {
-            filename.remove(0);
-        } else if !opt.recursive {
+        // Remove all path info if !opt.keep_path
+        if !opt.keep_path {
             filename = Path::new(item)
                 .file_name()
                 .unwrap()
@@ -97,16 +100,18 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         }
 
         let meta = file.metadata()?;
-        let header = TeleportInit {
-            protocol: PROTOCOL.to_string(),
-            version: VERSION.to_string(),
-            filenum: (num + 1) as u64,
-            totalfiles: files.len() as u64,
-            filesize: meta.len(),
-            filename: filename.to_string(),
-            chmod: meta.permissions().mode(),
-            overwrite: opt.overwrite,
-        };
+        let mut header = TeleportInit::new(TeleportFeatures::NewFile);
+        let mut features: u32 = 0;
+        if !opt.no_delta {
+            features |= TeleportFeatures::Delta as u32;
+        }
+        if opt.overwrite {
+            features |= TeleportFeatures::Overwrite as u32;
+        }
+        header.features = features;
+        header.chmod = meta.permissions().mode();
+        header.filesize = meta.len();
+        header.filename = filename.chars().collect();
 
         // Connect to server
         let addr = format!("{}:{}", opt.dest, opt.port);
@@ -126,71 +131,72 @@ pub fn run(opt: Opt) -> Result<(), Error> {
             }
         };
 
-        println!(
-            "Sending file {}/{}: {:?}",
-            header.filenum, header.totalfiles, header.filename
-        );
+        if opt.encrypt {
+            let mut ctx = TeleportEnc::new();
+            utils::send_packet(&mut stream, TeleportAction::Ecdh, &None, ctx.serialize())?;
+            let packet = utils::recv_packet(&mut stream, &None)?;
+            if packet.action == TeleportAction::EcdhAck as u8 {
+                ctx.deserialize(&packet.data)?;
+                enc = Some(ctx);
+            }
+        }
+
+        println!("Sending file {}/{}: {}", num + 1, files.len(), &filename);
 
         // Send header first
-        stream.write_all(&header.serialize())?;
+        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.serialize())?;
 
         // Receive response from server
-        let recv = match recv_ack(&stream) {
-            Some(t) => t,
-            None => {
-                println!("Receive TeleportInitAck timed out");
-                return Ok(());
-            }
-        };
+        let packet = utils::recv_packet(&mut stream, &enc)?;
+        let mut recv = TeleportInitAck::new(TeleportStatus::UnknownAction);
+        recv.deserialize(&packet.data)?;
 
         // Validate response
-        match &recv.ack {
-            TeleportInitStatus::Overwrite => {
-                println!("The server is overwriting the file: {}", &header.filename)
+        match recv.status.try_into().unwrap() {
+            TeleportStatus::NoOverwrite => {
+                println!("The server refused to overwrite the file: {:?}", &filename);
+                continue;
             }
-            TeleportInitStatus::NoOverwrite => {
+            TeleportStatus::NoPermission => {
                 println!(
-                    "The server refused to overwrite the file: {}",
-                    &header.filename
+                    "The server does not have permission to write to this file: {:?}",
+                    &filename
                 );
                 continue;
             }
-            TeleportInitStatus::NoPermission => {
+            TeleportStatus::NoSpace => {
                 println!(
-                    "The server does not have permission to write to this file: {}",
-                    &header.filename
+                    "The server has no space available to write the file: {:?}",
+                    &filename
                 );
                 continue;
             }
-            TeleportInitStatus::NoSpace => {
+            TeleportStatus::WrongVersion => {
                 println!(
-                    "The server has no space available to write the file: {}",
-                    &header.filename
-                );
-                continue;
-            }
-            TeleportInitStatus::WrongVersion => {
-                println!(
-                    "Error: Version mismatch! Server: {} Us: {}",
+                    "Error: Version mismatch! Server: {:?} Us: {}",
                     recv.version, VERSION
                 );
+                break;
+            }
+            TeleportStatus::EncryptionError => {
+                println!("Error initializing encryption handshake");
                 break;
             }
             _ => (),
         };
 
-        let csum_recv = recv.delta.as_ref().map(|r| r.csum);
+        let csum_recv = recv.delta.as_ref().map(|r| r.checksum);
         let mut checksum: Option<Hash> = None;
-        if recv.ack == TeleportInitStatus::Overwrite {
+        if utils::check_feature(&recv.features, TeleportFeatures::Overwrite) {
             checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 
         if checksum != None && checksum == csum_recv {
             // File matches hash
-            send_delta_complete(stream, file)?;
+            send_data_complete(stream, &enc, file)?;
         } else {
             // Send file data
-            send(stream, file, &header, recv.delta)?;
+            send(stream, file, &header, &enc, recv.delta)?;
         }
 
         let duration = start_time.elapsed();
@@ -200,37 +206,21 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     Ok(())
 }
 
-fn recv_ack(mut stream: &TcpStream) -> Option<TeleportInitAck> {
-    let mut buf: [u8; 4096 * 3] = [0; 4096 * 3];
-
-    // Receive ACK that the server is ready for data
-    let len = match stream.read(&mut buf) {
-        Ok(l) => l,
-        Err(_) => return None,
-    };
-
-    let fix = &buf[..len];
-    let mut resp = TeleportInitAck::new(TeleportInitStatus::WrongVersion);
-    if let Err(e) = resp.deserialize(fix.to_vec()) {
-        println!("{:?}", e);
-        return None;
-    };
-
-    Some(resp)
-}
-
-fn send_delta_complete(mut stream: TcpStream, file: File) -> Result<(), Error> {
+fn send_data_complete(
+    mut stream: TcpStream,
+    enc: &Option<TeleportEnc>,
+    file: File,
+) -> Result<(), Error> {
     let meta = file.metadata()?;
 
-    let chunk = TeleportData {
-        length: 0,
+    let mut chunk = TeleportData {
         offset: meta.len() as u64,
+        data_len: 0,
         data: Vec::<u8>::new(),
     };
 
     // Send the data chunk
-    stream.write_all(&chunk.serialize())?;
-    stream.flush()?;
+    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize())?;
 
     Ok(())
 }
@@ -240,6 +230,7 @@ fn send(
     mut stream: TcpStream,
     mut file: File,
     header: &TeleportInit,
+    enc: &Option<TeleportEnc>,
     delta: Option<TeleportDelta>,
 ) -> Result<(), Error> {
     let mut buf = Vec::<u8>::new();
@@ -247,8 +238,8 @@ fn send(
     let mut hasher = blake3::Hasher::new();
     match delta {
         Some(d) => {
-            buf.resize(d.delta_size as usize, 0);
-            hash_list = d.delta_csum;
+            buf.resize(d.chunk_size as usize, 0);
+            hash_list = d.delta_checksum;
         }
         None => buf.resize(4096, 0),
     }
@@ -279,27 +270,20 @@ fn send(
         }
 
         let data = &buf[..len];
-        let chunk = TeleportData {
-            length: len as u32,
+        let mut chunk = TeleportData {
             offset: sent as u64,
+            data_len: len as u32,
             data: data.to_vec(),
         };
 
         // Send the data chunk
-        match stream.write_all(&chunk.serialize()) {
-            Ok(_) => {}
-            Err(s) => return Err(s),
-        };
-        match stream.flush() {
-            Ok(_) => {}
-            Err(s) => return Err(s),
-        };
+        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize())?;
 
         sent += len;
-        print_updates(sent as f64, &header);
+        print_updates(sent as f64, header);
     }
 
-    send_delta_complete(stream, file)?;
+    send_data_complete(stream, enc, file)?;
 
     Ok(())
 }
