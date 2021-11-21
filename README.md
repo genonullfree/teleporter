@@ -18,13 +18,15 @@ USAGE:
     teleporter [FLAGS] [OPTIONS]
 
 FLAGS:
-    -e, --encrypt      Encrypt the file transfer using ECDH key-exchange and random keys
-    -h, --help         Prints help information
-    -k, --keep-path    Keep path info (recreate directory path on remote server)
-    -n, --no-delta     Disable delta transfer (overwrite will transfer entire file)
-    -o, --overwrite    Overwrite remote file
-    -r, --recursive    Recurse into directories on send
-    -V, --version      Prints version information
+        --allow-dangerous-filepath    Allow absolute and relative file paths for transfers (server only) [WARNING:
+                                      potentially dangerous option, use at your own risk!]
+    -e, --encrypt                     Encrypt the file transfer using ECDH key-exchange and random keys
+    -h, --help                        Prints help information
+    -k, --keep-path                   Keep path info (recreate directory path on remote server)
+    -n, --no-delta                    Disable delta transfer (overwrite will transfer entire file)
+    -o, --overwrite                   Overwrite remote file
+    -r, --recursive                   Recurse into directories on send
+    -V, --version                     Prints version information
 
 OPTIONS:
     -d, --dest <dest>         Destination teleporter IP address [default: 127.0.0.1]
