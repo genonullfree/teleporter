@@ -49,7 +49,17 @@ To start a teleporter in client (sending) mode, run:
 ./teleporter -d <destination IP> -i <file> [[file2] [file3] ...]
 ```
 
-Teleporter will transfer files with their name information as well as their file permissions. Any file path information will be lost. All the received files will be written out in the CWD where the server side was started.
+Teleporter will transfer files with their name information as well as their file permissions. Any file path information will be lost unless the `-k` option is enabled. All the received files will be written out in the CWD where the server side was started unless the server was started with the `--allow-dangerous-filepath` option.
+
+## Rename / Copy-To
+
+Teleporter can now set remote file locations, or file renaming, via the `:` operator. Similar to how `Docker` allows quick mounting of directory locations, Teleporter will first attempt to open a file by the full given path, if that file does not exist, it will see if there are any colons (`:`) in the filename. If present, it will split the filepath and attempt to open on the first portion of the name. If that succeeds, Teleporter assumes this is a file rename / copy-to. Teleporter will also need the `-k` option, to keep filepath information. Otherwise only the file name will be changed.
+
+For example, given the following command:
+```bash
+./teleporter -i ~/Downloads/ubuntu-20.04.3-live-server-arm64.iso:/tmp/ubuntu.iso -k
+```
+(and assuming the server was started with `--allow-dangerous-filepath`), Teleporter will first attempt to open `~/Downloads/ubuntu-20.04.3-live-server-arm64.iso:/tmp/ubuntu.iso`, if that fails, it will attempt to split the path on `:` and open `~/Downloads/ubuntu-20.04.3-live-server-arm64.iso`. If that succeeds, then it knows it is a rename / copy-to operation and will set the destination filepath to be the second part of the string: `/tmp/ubuntu.iso`. On the server, it will only receive the file for `/tmp/ubuntu.iso`. If the `-k` argument was ommitted, the server would just receive the original file renamed as `ubuntu.iso`.
 
 # Installation
 
