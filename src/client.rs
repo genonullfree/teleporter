@@ -5,6 +5,12 @@ use crate::utils::print_updates;
 use crate::*;
 use std::path::Path;
 
+#[derive(Debug)]
+struct Replace {
+    orig: Vec<String>,
+    new: Vec<String>,
+}
+
 fn get_file_list(opt: &Opt) -> Vec<String> {
     let mut files = Vec::<String>::new();
 
@@ -18,7 +24,7 @@ fn get_file_list(opt: &Opt) -> Vec<String> {
                 }
             };
             files.append(&mut tmp);
-        } else if item.is_file() {
+        } else if item.exists() && item.is_file() {
             files.push(item.to_str().unwrap().to_string());
         }
     }
@@ -52,9 +58,50 @@ fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
     Ok(files)
 }
 
+fn find_replacements(opt: &mut Opt) -> Replace {
+    let mut rep = Replace {
+        orig: Vec::<String>::new(),
+        new: Vec::<String>::new(),
+    };
+
+    let mut orig: String;
+    let mut new: String;
+    let mut poppers = Vec::<usize>::new();
+
+    for (idx, item) in opt.input.iter().enumerate() {
+        if File::open(&item).is_ok() {
+            continue;
+        }
+
+        let path = item.to_str().unwrap();
+        if path.contains(&":") {
+            let mut split = path.split(':');
+            orig = split.next().unwrap().to_string();
+            new = split.next().unwrap().to_string();
+
+            if File::open(&orig).is_ok() {
+                rep.orig.push(orig.clone());
+                rep.new.push(new.clone());
+                poppers.push(idx);
+            }
+        }
+    }
+
+    while !poppers.is_empty() {
+        let idx = poppers.pop().unwrap();
+        opt.input.remove(idx);
+        opt.input
+            .insert(idx, PathBuf::from(&rep.orig[poppers.len()]));
+    }
+
+    rep
+}
+
 /// Client function sends filename and file data for each filepath
-pub fn run(opt: Opt) -> Result<(), Error> {
+pub fn run(mut opt: Opt) -> Result<(), Error> {
     println!("Teleporter Client {}", VERSION);
+
+    let rep = find_replacements(&mut opt);
 
     let files = get_file_list(&opt);
 
@@ -71,6 +118,11 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
         let filepath = item;
         let mut filename = filepath.clone().to_string();
+        for (idx, item) in rep.orig.iter().enumerate() {
+            if item.contains(&filepath.to_string()) {
+                filename = rep.new[idx].clone();
+            }
+        }
 
         // Validate file
         let file = match File::open(&filepath) {
@@ -91,7 +143,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
         // Remove all path info if !opt.keep_path
         if !opt.keep_path {
-            filename = Path::new(item)
+            filename = Path::new(&filename)
                 .file_name()
                 .unwrap()
                 .to_str()

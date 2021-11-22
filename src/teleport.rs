@@ -694,6 +694,7 @@ mod tests {
         let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
+        test.version = [0, 6, 0];
         let out = test.serialize();
 
         assert_eq!(out, TESTINITACK);
@@ -704,6 +705,7 @@ mod tests {
         let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
+        test.version = [0, 6, 0];
 
         let mut t = TeleportInitAck::new(TeleportStatus::Proceed);
         t.deserialize(TESTINITACK).unwrap();
