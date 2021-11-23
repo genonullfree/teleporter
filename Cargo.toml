@@ -16,7 +16,7 @@ edition = "2021"
 [dependencies]
 structopt = "0.3.13"
 byteorder = "1.4.3"
-blake3 = "1.0.0"
+ahash = "0.7.6"
 rust-crypto = "^0.2"
 rand = "0.5"
 generic-array = "0.14.4"
