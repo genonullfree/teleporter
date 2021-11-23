@@ -1,6 +1,6 @@
 [package]
 name = "teleporter"
-version = "0.6.2"
+version = "0.7.0"
 authors = ["geno nullfree <nullfree.geno@gmail.com>"]
 license = "BSD-3-Clause"
 description = "A small utility to send files quickly from point A to point B"
@@ -16,7 +16,7 @@ edition = "2021"
 [dependencies]
 structopt = "0.3.13"
 byteorder = "1.4.3"
-blake3 = "1.0.0"
+xxhash-rust = { version = "0.8.2", features = ["xxh3"] }
 rust-crypto = "^0.2"
 rand = "0.5"
 generic-array = "0.14.4"
