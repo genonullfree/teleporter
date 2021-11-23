@@ -126,6 +126,16 @@ fn recv(
         filename = filename.replace("../", "");
     }
 
+    if features & TeleportFeatures::Rename as u32 == TeleportFeatures::Rename as u32 {
+        let mut num = 1;
+        let mut dest = filename.clone();
+        while Path::new(&dest).exists() {
+            dest = filename.clone() + "." + &num.to_string();
+            num += 1;
+        }
+        filename = dest;
+    }
+
     // Test if overwrite is false and file exists
     if features & TeleportFeatures::Overwrite as u32 != TeleportFeatures::Overwrite as u32
         && Path::new(&filename).exists()

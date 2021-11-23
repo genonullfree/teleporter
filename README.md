@@ -23,6 +23,8 @@ FLAGS:
     -b, --backup                      Backup the destination file to a ".bak" extension if it exists and is being
                                       overwritten (consecutive runs will replace the *.bak file)
     -e, --encrypt                     Encrypt the file transfer using ECDH key-exchange and random keys
+    -f, --filename-append             If the destination file exists, append a ".1" (or next available number) to the
+                                      filename instead of overwriting
     -h, --help                        Prints help information
     -k, --keep-path                   Keep path info (recreate directory path on remote server)
     -n, --no-delta                    Disable delta transfer (overwrite will transfer entire file)
