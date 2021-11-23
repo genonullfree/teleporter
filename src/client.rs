@@ -160,6 +160,12 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
         if opt.overwrite {
             features |= TeleportFeatures::Overwrite as u32;
         }
+        if opt.backup {
+            features |= TeleportFeatures::Backup as u32;
+        }
+        if opt.filename_append {
+            features |= TeleportFeatures::Rename as u32;
+        }
         header.features = features;
         header.chmod = meta.permissions().mode();
         header.filesize = meta.len();
