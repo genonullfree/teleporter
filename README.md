@@ -20,6 +20,8 @@ USAGE:
 FLAGS:
         --allow-dangerous-filepath    Allow absolute and relative file paths for transfers (server only) [WARNING:
                                       potentially dangerous option, use at your own risk!]
+    -b, --backup                      Backup the destination file to a ".bak" extension if it exists and is being
+                                      overwritten (consecutive runs will replace the *.bak file)
     -e, --encrypt                     Encrypt the file transfer using ECDH key-exchange and random keys
     -h, --help                        Prints help information
     -k, --keep-path                   Keep path info (recreate directory path on remote server)

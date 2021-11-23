@@ -144,7 +144,13 @@ fn recv(
 
     // Open file for writing
     file = match OpenOptions::new().read(true).write(true).open(&filename) {
-        Ok(f) => f,
+        Ok(f) => {
+            if features & TeleportFeatures::Backup as u32 == TeleportFeatures::Backup as u32 {
+                let dest = filename.clone() + ".bak";
+                fs::copy(&filename, &dest)?;
+            }
+            f
+        }
         Err(_) => match File::create(&filename) {
             Ok(f) => f,
             Err(_) => {

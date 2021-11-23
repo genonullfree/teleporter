@@ -168,6 +168,7 @@ pub enum TeleportFeatures {
     NewFile = 0x01,
     Delta = 0x02,
     Overwrite = 0x04,
+    Backup = 0x08,
 }
 
 impl TeleportInit {

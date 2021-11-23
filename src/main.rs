@@ -59,6 +59,10 @@ pub struct Opt {
     /// Allow absolute and relative file paths for transfers (server only) [WARNING: potentially dangerous option, use at your own risk!]
     #[structopt(long)]
     allow_dangerous_filepath: bool,
+
+    /// Backup the destination file to a ".bak" extension if it exists and is being overwritten (consecutive runs will replace the *.bak file)
+    #[structopt(short, long)]
+    backup: bool,
 }
 
 const PROTOCOL: u64 = 0x54524f50454c4554;
