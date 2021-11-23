@@ -3,6 +3,8 @@ use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportHea
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
+use std::hash::Hasher;
+use xxhash_rust::xxh64;
 
 struct SizeUnit {
     value: f64,
@@ -154,8 +156,8 @@ fn gen_chunk_size(file_size: u64) -> usize {
 }
 
 // Called from client
-pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
-    let mut hasher = blake3::Hasher::new();
+pub fn calc_file_hash(filename: String) -> Result<u64, Error> {
+    let mut hasher = xxh64::Xxh64::new(0xdeadbeef);
     let mut buf = Vec::<u8>::new();
 
     let mut file = File::open(filename)?;
@@ -175,12 +177,12 @@ pub fn calc_file_hash(filename: String) -> Result<Hash, Error> {
             break;
         }
 
-        hasher.update(&buf);
+        hasher.write(&buf);
     }
 
     file.seek(SeekFrom::Start(0))?;
 
-    Ok(hasher.finalize())
+    Ok(hasher.finish())
 }
 
 pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), Error> {
@@ -212,11 +214,11 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
     file.seek(SeekFrom::Start(0))?;
     let mut buf = Vec::<u8>::new();
     buf.resize(gen_chunk_size(meta.len()), 0);
-    let mut hasher = blake3::Hasher::new();
-    let mut whole_hasher = blake3::Hasher::new();
-    let mut delta_checksum = Vec::<Hash>::new();
+    let mut whole_hasher = xxh64::Xxh64::new(0xdeadbeef);
+    let mut delta_checksum = Vec::<u64>::new();
 
     loop {
+        let mut hasher = xxh64::Xxh64::new(0xdeadbeef);
         // Read a chunk of the file
         let len = match file.read(&mut buf) {
             Ok(l) => l,
@@ -226,17 +228,16 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
             break;
         }
 
-        hasher.update(&buf);
-        delta_checksum.push(hasher.finalize());
-        hasher.reset();
+        hasher.write(&buf);
+        delta_checksum.push(hasher.finish());
 
-        whole_hasher.update(&buf);
+        whole_hasher.write(&buf);
     }
 
     let mut out = teleport::TeleportDelta::new();
     out.filesize = file_size as u64;
     out.chunk_size = buf.len() as u64;
-    out.checksum = whole_hasher.finalize();
+    out.checksum = whole_hasher.finish();
     out.delta_checksum = delta_checksum;
 
     file.seek(SeekFrom::Start(0))?;

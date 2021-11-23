@@ -377,28 +377,28 @@ impl TeleportInitAck {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TeleportDelta {
     pub filesize: u64,
-    pub checksum: Hash,
+    pub checksum: u64,
     pub chunk_size: u64,
     delta_checksum_len: u16,
-    pub delta_checksum: Vec<Hash>,
+    pub delta_checksum: Vec<u64>,
 }
 
 impl TeleportDelta {
     pub fn new() -> TeleportDelta {
         TeleportDelta {
             filesize: 0,
-            checksum: [0; 32].try_into().unwrap(),
+            checksum: 0,
             chunk_size: 0,
             delta_checksum_len: 0,
-            delta_checksum: Vec::<Hash>::new(),
+            delta_checksum: Vec::<u64>::new(),
         }
     }
 
-    fn delta_serial(input: &[Hash]) -> Vec<u8> {
+    fn delta_serial(input: &[u64]) -> Vec<u8> {
         let mut out = Vec::<u8>::new();
 
         for i in input {
-            out.append(&mut i.as_bytes().to_vec());
+            out.append(&mut i.to_le_bytes().to_vec());
         }
 
         out
@@ -411,7 +411,7 @@ impl TeleportDelta {
         out.append(&mut self.filesize.to_le_bytes().to_vec());
 
         // Add file hash
-        out.append(&mut self.checksum.as_bytes().to_vec());
+        out.append(&mut self.checksum.to_le_bytes().to_vec());
 
         // Add chunk size
         out.append(&mut self.chunk_size.to_le_bytes().to_vec());
@@ -426,20 +426,21 @@ impl TeleportDelta {
         out
     }
 
-    fn delta_deserial(input: &[u8]) -> Result<Vec<Hash>, Error> {
-        if input.len() % 32 != 0 {
+    fn delta_deserial(input: &[u8], len: u16) -> Result<Vec<u64>, Error> {
+        if input.len() % 8 != 0 || len as usize != input.len() / 8 {
             return Err(Error::new(
                 ErrorKind::InvalidData,
-                "Cannot deserialize Vec<Hash>",
+                "Cannot deserialize Vec<u64>",
             ));
         }
 
-        let mut out = Vec::<Hash>::new();
-
-        for i in input.chunks(32) {
-            let a: [u8; 32] = i.try_into().unwrap();
-            let h: Hash = a.try_into().unwrap();
-            out.push(h);
+        let mut out = Vec::<u64>::new();
+        let mut buf = input;
+        let mut count: u16 = len;
+        while count > 0 {
+            let a: u64 = buf.read_u64::<LittleEndian>().unwrap();
+            out.push(a);
+            count -= 1;
         }
 
         Ok(out)
@@ -448,7 +449,7 @@ impl TeleportDelta {
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
         let mut buf: &[u8] = input;
 
-        if input.len() < 50 {
+        if input.len() < 26 {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "Not enough data for Delta deserialize",
@@ -458,9 +459,7 @@ impl TeleportDelta {
         self.filesize = buf.read_u64::<LittleEndian>().unwrap();
 
         // Extract file hash
-        let csum: [u8; 32] = input[8..40].try_into().unwrap();
-        self.checksum = csum.try_into().unwrap();
-        let mut buf: &[u8] = &input[40..];
+        self.checksum = buf.read_u64::<LittleEndian>().unwrap();
 
         // Extract chunk size
         self.chunk_size = buf.read_u64::<LittleEndian>().unwrap();
@@ -469,7 +468,7 @@ impl TeleportDelta {
         self.delta_checksum_len = buf.read_u16::<LittleEndian>().unwrap();
 
         // Extract delta vector
-        self.delta_checksum = TeleportDelta::delta_deserial(&input[50..]).unwrap();
+        self.delta_checksum = TeleportDelta::delta_deserial(buf, self.delta_checksum_len).unwrap();
 
         Ok(())
     }
@@ -545,8 +544,7 @@ mod tests {
         101,
     ];
     const TESTDELTA: &[u8] = &[
-        177, 104, 222, 58, 0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5,
-        5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 21, 205, 91, 7, 0, 0, 0, 0, 0, 0,
+        177, 104, 222, 58, 0, 0, 0, 0, 57, 48, 0, 0, 0, 0, 0, 0, 21, 205, 91, 7, 0, 0, 0, 0, 0, 0,
     ];
     const TESTDATAPKT: &[u8] = &[49, 212, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 1, 2, 3, 4, 5];
     const TESTINITACK: &[u8] = &[0, 0, 0, 6, 0, 0, 0, 5, 0, 0, 0];
@@ -643,9 +641,9 @@ mod tests {
     fn test_teleportdelta_serialize() {
         let mut test = TeleportDelta::new();
         test.filesize = 987654321;
-        test.checksum = [5; 32].try_into().unwrap();
+        test.checksum = 12345;
         test.chunk_size = 123456789;
-        test.delta_checksum = Vec::<Hash>::new();
+        test.delta_checksum = Vec::<u64>::new();
 
         let out = test.serialize();
 
@@ -656,9 +654,9 @@ mod tests {
     fn test_teleportdelta_deserialize() {
         let mut test = TeleportDelta::new();
         test.filesize = 987654321;
-        test.checksum = [5; 32].try_into().unwrap();
+        test.checksum = 12345;
         test.chunk_size = 123456789;
-        test.delta_checksum = Vec::<Hash>::new();
+        test.delta_checksum = Vec::<u64>::new();
 
         let mut t = TeleportDelta::new();
         t.deserialize(TESTDELTA).unwrap();
