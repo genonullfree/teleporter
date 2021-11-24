@@ -214,8 +214,8 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
     file.seek(SeekFrom::Start(0))?;
     let mut buf = Vec::<u8>::new();
     buf.resize(gen_chunk_size(meta.len()), 0);
-    let mut whole_hasher = AHasher::new_with_keys(0xdead, 0xbeef);
-    let mut delta_checksum = Vec::<u64>::new();
+    let mut file_hash = AHasher::new_with_keys(0xdead, 0xbeef);
+    let mut chunk_hash = Vec::<u64>::new();
 
     loop {
         let mut hasher = AHasher::new_with_keys(0xdead, 0xbeef);
@@ -229,16 +229,16 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
         }
 
         hasher.write(&buf);
-        delta_checksum.push(hasher.finish());
+        chunk_hash.push(hasher.finish());
 
-        whole_hasher.write(&buf);
+        file_hash.write(&buf);
     }
 
     let mut out = teleport::TeleportDelta::new();
     out.filesize = file_size as u64;
     out.chunk_size = buf.len() as u64;
-    out.checksum = whole_hasher.finish();
-    out.delta_checksum = delta_checksum;
+    out.hash = file_hash.finish();
+    out.delta_hash = chunk_hash;
 
     file.seek(SeekFrom::Start(0))?;
 

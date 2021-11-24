@@ -245,13 +245,13 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             _ => (),
         };
 
-        let csum_recv = recv.delta.as_ref().map(|r| r.checksum);
-        let mut checksum: Option<u64> = None;
+        let csum_recv = recv.delta.as_ref().map(|r| r.hash);
+        let mut hash: Option<u64> = None;
         if utils::check_feature(&recv.features, TeleportFeatures::Overwrite) {
-            checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
+            hash = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 
-        if checksum != None && checksum == csum_recv {
+        if hash != None && hash == csum_recv {
             // File matches hash
             send_data_complete(stream, &enc, file)?;
         } else {
@@ -298,7 +298,7 @@ fn send(
     match delta {
         Some(d) => {
             buf.resize(d.chunk_size as usize, 0);
-            hash_list = d.delta_checksum;
+            hash_list = d.delta_hash;
         }
         None => buf.resize(4096, 0),
     }
