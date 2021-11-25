@@ -3,7 +3,9 @@ use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
+use std::hash::Hasher;
 use std::path::Path;
+use xxhash_rust::xxh3;
 
 #[derive(Debug)]
 struct Replace {
@@ -243,13 +245,13 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             _ => (),
         };
 
-        let csum_recv = recv.delta.as_ref().map(|r| r.checksum);
-        let mut checksum: Option<Hash> = None;
+        let csum_recv = recv.delta.as_ref().map(|r| r.hash);
+        let mut hash: Option<u64> = None;
         if utils::check_feature(&recv.features, TeleportFeatures::Overwrite) {
-            checksum = handle.map(|s| s.join().expect("calc_file_hash panicked"));
+            hash = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 
-        if checksum != None && checksum == csum_recv {
+        if hash != None && hash == csum_recv {
             // File matches hash
             send_data_complete(stream, &enc, file)?;
         } else {
@@ -292,12 +294,11 @@ fn send(
     delta: Option<TeleportDelta>,
 ) -> Result<(), Error> {
     let mut buf = Vec::<u8>::new();
-    let mut hash_list = Vec::<Hash>::new();
-    let mut hasher = blake3::Hasher::new();
+    let mut hash_list = Vec::<u64>::new();
     match delta {
         Some(d) => {
             buf.resize(d.chunk_size as usize, 0);
-            hash_list = d.delta_checksum;
+            hash_list = d.chunk_hash;
         }
         None => buf.resize(4096, 0),
     }
@@ -319,12 +320,12 @@ fn send(
         // Check if hash matches, if so: skip chunk
         let index = sent / buf.len();
         if !hash_list.is_empty() && index < hash_list.len() {
-            hasher.update(&buf);
-            if hash_list[index] == hasher.finalize() {
+            let mut hasher = xxh3::Xxh3::new();
+            hasher.write(&buf);
+            if hash_list[index] == hasher.finish() {
                 sent += len;
                 continue;
             }
-            hasher.reset();
         }
 
         let data = &buf[..len];

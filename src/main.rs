@@ -1,4 +1,3 @@
-use blake3::Hash;
 use semver::Version;
 use std::fs::File;
 use std::io::{self, Read, Write};
