@@ -377,20 +377,20 @@ impl TeleportInitAck {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TeleportDelta {
     pub filesize: u64,
-    pub checksum: u64,
+    pub hash: u64,
     pub chunk_size: u64,
-    delta_checksum_len: u16,
-    pub delta_checksum: Vec<u64>,
+    chunk_hash_len: u16,
+    pub chunk_hash: Vec<u64>,
 }
 
 impl TeleportDelta {
     pub fn new() -> TeleportDelta {
         TeleportDelta {
             filesize: 0,
-            checksum: 0,
+            hash: 0,
             chunk_size: 0,
-            delta_checksum_len: 0,
-            delta_checksum: Vec::<u64>::new(),
+            chunk_hash_len: 0,
+            chunk_hash: Vec::<u64>::new(),
         }
     }
 
@@ -411,17 +411,17 @@ impl TeleportDelta {
         out.append(&mut self.filesize.to_le_bytes().to_vec());
 
         // Add file hash
-        out.append(&mut self.checksum.to_le_bytes().to_vec());
+        out.append(&mut self.hash.to_le_bytes().to_vec());
 
         // Add chunk size
         out.append(&mut self.chunk_size.to_le_bytes().to_vec());
 
         // Add delta vector length
-        let dlen = self.delta_checksum.len() as u16;
+        let dlen = self.chunk_hash.len() as u16;
         out.append(&mut dlen.to_le_bytes().to_vec());
 
         // Add delta vector
-        out.append(&mut TeleportDelta::delta_serial(&self.delta_checksum));
+        out.append(&mut TeleportDelta::delta_serial(&self.chunk_hash));
 
         out
     }
@@ -459,16 +459,16 @@ impl TeleportDelta {
         self.filesize = buf.read_u64::<LittleEndian>().unwrap();
 
         // Extract file hash
-        self.checksum = buf.read_u64::<LittleEndian>().unwrap();
+        self.hash = buf.read_u64::<LittleEndian>().unwrap();
 
         // Extract chunk size
         self.chunk_size = buf.read_u64::<LittleEndian>().unwrap();
 
         // Extract delta vector length
-        self.delta_checksum_len = buf.read_u16::<LittleEndian>().unwrap();
+        self.chunk_hash_len = buf.read_u16::<LittleEndian>().unwrap();
 
         // Extract delta vector
-        self.delta_checksum = TeleportDelta::delta_deserial(buf, self.delta_checksum_len).unwrap();
+        self.chunk_hash = TeleportDelta::delta_deserial(buf, self.chunk_hash_len).unwrap();
 
         Ok(())
     }
@@ -641,9 +641,9 @@ mod tests {
     fn test_teleportdelta_serialize() {
         let mut test = TeleportDelta::new();
         test.filesize = 987654321;
-        test.checksum = 12345;
+        test.hash = 12345;
         test.chunk_size = 123456789;
-        test.delta_checksum = Vec::<u64>::new();
+        test.chunk_hash = Vec::<u64>::new();
 
         let out = test.serialize();
 
@@ -654,9 +654,9 @@ mod tests {
     fn test_teleportdelta_deserialize() {
         let mut test = TeleportDelta::new();
         test.filesize = 987654321;
-        test.checksum = 12345;
+        test.hash = 12345;
         test.chunk_size = 123456789;
-        test.delta_checksum = Vec::<u64>::new();
+        test.chunk_hash = Vec::<u64>::new();
 
         let mut t = TeleportDelta::new();
         t.deserialize(TESTDELTA).unwrap();
