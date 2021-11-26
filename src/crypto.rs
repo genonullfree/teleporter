@@ -8,7 +8,7 @@ use x25519_dalek::{EphemeralSecret, PublicKey};
 
 pub fn genkey(ctx: &mut TeleportEnc) -> EphemeralSecret {
     let secret = EphemeralSecret::new(OsRng);
-    ctx.public.key = PublicKey::from(&secret).to_bytes();
+    ctx.public = PublicKey::from(&secret).to_bytes();
 
     secret
 }

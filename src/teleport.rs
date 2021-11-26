@@ -102,12 +102,7 @@ impl TeleportHeader {
 pub struct TeleportEnc {
     secret: [u8; 32],
     remote: [u8; 32],
-    pub public: TeleportEcdhExchange,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct TeleportEcdhExchange {
-    pub key: [u8; 32],
+    pub public: [u8; 32],
 }
 
 impl TeleportEnc {
@@ -115,12 +110,12 @@ impl TeleportEnc {
         TeleportEnc {
             secret: [0; 32],
             remote: [0; 32],
-            public: TeleportEcdhExchange { key: [0; 32] },
+            public: [0; 32],
         }
     }
 
     pub fn serialize(self) -> Vec<u8> {
-        self.public.key.to_vec()
+        self.public.to_vec()
     }
 
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
