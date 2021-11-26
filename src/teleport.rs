@@ -1,5 +1,6 @@
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
+use x25519_dalek::{EphemeralSecret, PublicKey};
 
 #[derive(Debug, PartialEq)]
 pub struct TeleportHeader {
@@ -100,24 +101,21 @@ impl TeleportHeader {
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TeleportEnc {
     secret: [u8; 32],
-    privkey: [u8; 64],
     remote: [u8; 32],
-    public: TeleportEcdhExchange,
+    pub public: TeleportEcdhExchange,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TeleportEcdhExchange {
-    key: [u8; 32],
+    pub key: [u8; 32],
 }
 
 impl TeleportEnc {
     pub fn new() -> TeleportEnc {
-        let (privkey, pubkey) = crypto::genkey();
         TeleportEnc {
             secret: [0; 32],
             remote: [0; 32],
-            privkey,
-            public: TeleportEcdhExchange { key: pubkey },
+            public: TeleportEcdhExchange { key: [0; 32] },
         }
     }
 
@@ -135,13 +133,12 @@ impl TeleportEnc {
 
         self.remote = input[..32].try_into().expect("Error reading public key");
 
-        self.calc_secret();
-
         Ok(())
     }
 
-    pub fn calc_secret(&mut self) {
-        self.secret = crypto::calc_secret(&self.remote, &self.privkey)
+    pub fn calc_secret(&mut self, privkey: EphemeralSecret) {
+        let pubkey = PublicKey::from(self.remote);
+        self.secret = privkey.diffie_hellman(&pubkey).to_bytes()
     }
 
     pub fn encrypt(self, nonce: &[u8; 12], input: &[u8]) -> Result<Vec<u8>, Error> {
@@ -575,11 +572,14 @@ mod tests {
         let mut a = TeleportEnc::new();
         let mut b = TeleportEnc::new();
 
+        let priva = crypto::genkey(&mut a);
+        let privb = crypto::genkey(&mut b);
+
         a.deserialize(&b.serialize()).unwrap();
         b.deserialize(&a.serialize()).unwrap();
 
-        a.calc_secret();
-        b.calc_secret();
+        a.calc_secret(priva);
+        b.calc_secret(privb);
 
         assert_eq!(a.secret, b.secret);
     }
@@ -592,11 +592,15 @@ mod tests {
         let mut a = TeleportEnc::new();
         let mut b = TeleportEnc::new();
 
+        let priva = crypto::genkey(&mut a);
+        let privb = crypto::genkey(&mut b);
+
         a.deserialize(&b.serialize()).unwrap();
         b.deserialize(&a.serialize()).unwrap();
 
-        a.calc_secret();
-        b.calc_secret();
+        a.calc_secret(priva);
+        b.calc_secret(privb);
+
         assert_eq!(a.secret, b.secret);
 
         let data = TESTHEADER.to_vec();
