@@ -1,21 +1,16 @@
+use crate::teleport::TeleportEnc;
 use crate::{Error, ErrorKind};
 use aes_gcm::aead::{Aead, NewAead};
 use aes_gcm::{Aes256Gcm, Key};
-use crypto::ed25519::{exchange, keypair};
 use generic_array::GenericArray;
-use rand::prelude::*;
+use rand_core::OsRng;
+use x25519_dalek::{EphemeralSecret, PublicKey};
 
-pub fn genkey() -> ([u8; 64], [u8; 32]) {
-    let mut rng = StdRng::from_entropy();
+pub fn genkey(ctx: &mut TeleportEnc) -> EphemeralSecret {
+    let secret = EphemeralSecret::new(OsRng);
+    ctx.public = PublicKey::from(&secret).to_bytes();
 
-    let mut seed: [u8; 32] = [0; 32];
-    rng.fill(&mut seed);
-
-    keypair(&seed)
-}
-
-pub fn calc_secret(public: &[u8; 32], private: &[u8; 64]) -> [u8; 32] {
-    exchange(public, private)
+    secret
 }
 
 pub fn decrypt(key: &[u8; 32], nonce: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, Error> {

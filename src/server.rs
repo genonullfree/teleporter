@@ -88,7 +88,9 @@ fn recv(
     let mut packet = utils::recv_packet(&mut stream, &None)?;
     if packet.action == TeleportAction::Ecdh as u8 {
         let mut ctx = TeleportEnc::new();
+        let privkey = crypto::genkey(&mut ctx);
         ctx.deserialize(&packet.data)?;
+        ctx.calc_secret(privkey);
         utils::send_packet(&mut stream, TeleportAction::EcdhAck, &None, ctx.serialize())?;
         enc = Some(ctx);
         packet = utils::recv_packet(&mut stream, &enc)?;

@@ -193,10 +193,12 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
 
         if opt.encrypt {
             let mut ctx = TeleportEnc::new();
+            let privkey = crypto::genkey(&mut ctx);
             utils::send_packet(&mut stream, TeleportAction::Ecdh, &None, ctx.serialize())?;
             let packet = utils::recv_packet(&mut stream, &None)?;
             if packet.action == TeleportAction::EcdhAck as u8 {
                 ctx.deserialize(&packet.data)?;
+                ctx.calc_secret(privkey);
                 enc = Some(ctx);
             }
         }
