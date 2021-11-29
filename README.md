@@ -4,11 +4,11 @@ Teleporter is a small utility in the vein of netcat to send files quickly from p
 
 Teleporter lets you pass the destination and a list of files you wish to send and it will create those files with the proper filenames on the receiving end. Each Teleporter binary can act as a client or a server so there's no need to move multiple software packages around.
 
-Teleporter can recursively copy files as well, just pass a directory name and it will copy files all the way down.
+Teleporter can recursively copy, overwrite, rename, and keep a backup of the destination file.
 
-Teleporter now does delta file transfers using the Blake3 hashing algorithm for files being overwritten.
+Teleporter now does delta file transfers using the xxHash3 hashing algorithm for files being overwritten, hashing the entire file as well as splitting the file into a number of smaller chunks.
 
-The protocol Teleporter implements to transfer files is called Teleport.
+The protocol Teleporter implements to transfer files is called Teleport and is defined in ``PROTOCOL.md``.
 
 # Usage
 ```
@@ -40,7 +40,7 @@ OPTIONS:
 
 To start a teleporter in server (receiving) mode, just run:
 ```
-./teleporter
+teleporter
 ```
 or
 ```
@@ -50,10 +50,10 @@ Teleporter will default to listening on `0.0.0.0:9001` for incoming connections.
 
 To start a teleporter in client (sending) mode, run:
 ```
-./teleporter -d <destination IP> -i <file> [[file2] [file3] ...]
+teleporter [-d <destination IP>] -i <file> [[file2] [file3] ...]
 ```
 
-Teleporter will transfer files with their name information as well as their file permissions. Any file path information will be lost unless the `-k` option is enabled. All the received files will be written out in the CWD where the server side was started unless the server was started with the `--allow-dangerous-filepath` option.
+Teleporter will transfer files with their name information as well as their file permissions. Any file path information will be lost unless the `-k` option is enabled. All the received files will be written out in the CWD where the server side was started unless the server was started with the `--allow-dangerous-filepath` option. When overwriting a file with the `-o` option, additional modifiers can be used, such as `-b` to make a backup of the original file, or `-n` to disable delta file transfers and always overwrite the entire file. 
 
 ## Rename / Copy-To
 
