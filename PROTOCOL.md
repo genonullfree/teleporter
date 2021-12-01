@@ -8,202 +8,163 @@ file data for each file in the command line arguments provided.
 
 ## Protocol
 
-The packet that initiates the connection is the `TeleportInit` packet, defined as follows:
+Every packet in the protocol is wrapped in a TeleportHeader, which is defined as:
 ```rust
-pub struct TeleportInit {
-    protocol: String,
-    version: String,
-    filename: String,
-    filenum: u64,
-    totalfiles: u64,
-    filesize: u64,
-    chmod: u32,
-    overwrite: bool,
-    checksum: u8
+pub struct TeleportHeader {
+    protocol: u64, // [ 'T', 'E', 'L', 'E', 'P', 'O', 'R', 'T' ]
+    data_len: u32,
+    pub action: TeleportAction, // as u8
+    pub iv: Option<[u8; 12]>,
+    pub data: Vec<u8>,
 }
 ```
 
-The `protocol` string is always `TELEPORT`. The `version` string is whatever the current version of
-the client is, for example: `0.4.6`. The next string is the `filename` of the file that is being
-sent. The strings are all NULL-terminated. The `filenum` field is a unsigned 64bit integer that is
-the file number of the current file in a batch of files and starts counting at `1`. `totalfile` is
-the number of files that will be sent together in the current batch and also starts counting at `1`.
-`filesize` is the size of the current file in bytes. `chmod` is the current file permissions to be
-applied to the file when it is received on the server side. `overwrite` is a boolean that indicates
-to the server if this file is to overwrite an existing file on the server, if it exists. The
-`checksum` byte is a simple byte addition modulo `0xff` across the entire packet.
+The protocol field is alwasy `TELEPORT`. The `data_len` is the length of the data field in the packet, which is calculated by adding the `data_len` value with the length of the `protocol`, `data_len`, `action` fields, and optionally `iv` depending on the value in `action` (`8 + 4 + 1` + `12` if `iv.is_some()`). The vector of `data` is deserialized based on what the value of `action` is. `TeleportAction` is defined here:
+```rust
+pub enum TeleportAction {
+    Init = 0x01,
+    InitAck = 0x02,
+    Ecdh = 0x04,
+    EcdhAck = 0x08,
+    Data = 0x40,
+    Encrypted = 0x80,
+}
+```
+
+When encryption is enabled, the `action` field is OR'd with the `Encrypted` value, which is how the `TeleportHeader` deserialization knows if the `iv` field is present or not.
+
+For standard unencrypted transfers, the protocol flows like this:
+```
+Client:                         Server:
+TeleportAction::Init ==========>
+        <====================== TeleportAction::InitAck
+TeleportAction::Data ==========>
+TeleportAction::Data ==========>
+TeleportAction::Data ==========>
+...
+```
+
+For encrypted transfers, the protocol flows like this:
+```
+Client:                                             Server:
+TeleportAction::Ecdh ==============================>
+        <========================================== TeleportAction::EcdhAck
+TeleportAction::Init|TeleportAction::Encrypted ====>
+        <========================================== TeleportAction::InitAck|TeleportAction::Encrypted
+TeleportAction::Data|TeleportAction::Encrypted ====>
+TeleportAction::Data|TeleportAction::Encrypted ====>
+TeleportAction::Data|TeleportAction::Encrypted ====>
+...
+```
+
+The `Ecdh` and `EcdhAck` action packets only contain the Client and Server ECDH public keys, respectively, in the `TeleportHeader`'s `data` field. This allows Teleporter to do an ECDH key exchange and generate a secure secret key. This secret key is used to encrypt the rest of the connection, which will only last for 1 file transfer. Every file transfer renegotiates a new secret key. All the data in the `TeleportHeader` `data` field is encrypted, and the `iv` used is stored in the `iv` field.
+
+The packet that initiates the transfer is the `Init` action packet, defined as follows:
+```rust
+// Client to server
+pub struct TeleportInit {
+    pub version: [u16; 3], // [ major, minor, patch ]
+    pub features: TeleportFeatures, // as u32
+    pub chmod: u32,
+    pub filesize: u64,
+    pub filename_len: u16,
+    pub filename: Vec<char>,
+}
+```
+
+The `version` value is whatever the current version of the client is, for example: `[0, 4, 6]`. The
+`features` value is a bitfield of any requested features that the client supports and would like the
+server to support. `chmod` is the current file permissions to be applied to the file when it is
+received on the server side. `filesize` is the size of the file to be transferred in bytes. The length
+of the filename is stored in `filename_len`, and the vector of characters of the filename is sent in
+`filename`.
+
+The current feature set is:
+```rust
+pub enum TeleportFeatures {
+    NewFile = 0x01,
+    Delta = 0x02,
+    Overwrite = 0x04,
+    Backup = 0x08,
+    Rename = 0x10,
+}
+```
+
+`NewFile` is the minimum default feature that should be enabled on any transfer. The `Delta` enables delta
+file transfers by hashing the file into chunks and comparing the hash values to calculate the minimum data
+that needs to be sent to transfer the file. The `Overwrite` flag allows the Client to send a file and
+overwrite a file that already exists on the Server. The `Backup` flag tells the Server to make a backup of
+the file if it is being overwritten (saving it to `$filename.bak`). The `Rename` flag tells the server to
+save the new file transfer to `$filename.1` instead of overwriting an existing file.
+
 
 The `TeleportInit` file is responded to with a `TeleportAck`, which has the following properties:
 ```rust
 pub struct TeleportInitAck {
-    ack: TeleportInitStatus,
-    version: String,
-    delta: Option<TeleportDelta>,
-    checksum: u8
+    pub ack: TeleportInitStatus, // as u8
+    pub version: [u16; 3],
+    pub features: Option<u32>,
+    pub delta: Option<TeleportDelta>,
 }
 ```
 
-The values of `ack` are of the enumerated type `TeleportInitStatus`, which are described below. The
-`version` string is NULL-terminated and is the current version of the server. Only the `major` and
-`minor` versions of the version string must match; the point release must not include protocol
-breaking changes. The optional `delta` field is included last and is described after
-`TeleportInitStatus`. The `checksum` byte is a simple byte addition modulo `0xff` across the entire
-packet.
+The values of `ack` are of the enumerated type `TeleportInitStatus` as u8, which are described below. The
+`version` array is the current version of the server. Only the `major` and `minor` versions of the version
+array must match; the point release must not introduce protocol breaking changes. `features` is an optional
+field that is only present if `ack == TeleportInitStatus::Proceed`. The optional `delta` field is included
+last if the `Delta` flag is present in the `features` field and is described in detail after
+`TeleportInitStatus`. 
 
 ```rust
 pub enum TeleportInitStatus {
-    Proceed,      // Success
-    Overwrite,    // Success, delta overwrite
-    NoOverwrite,  // Error
-    NoSpace,      // Error
-    NoPermission, // Error
-    WrongVersion, // Error
+    Proceed,
+    NoOverwrite,
+    NoSpace,
+    NoPermission,
+    WrongVersion,
+    EncryptionError,
+    UnknownAction,
 }
 ```
-The values `Proceed` and `Overwrite` give the feedback to the client that it is ready to proceed with
-the file transfer. `Overwrite` specifically indicates that there is a file on the server side that
-will be overwritten. All the other values are specific error scenarios that cause the client to not
-proceed with the file transfer.
+The value `Proceed` tells the client that it is ready to proceed with the file transfer. All the other
+values are specific error scenarios that cause the client to not proceed with the file transfer.
 
 ```rust
 pub struct TeleportDelta {
-    size: u64,
-    delta_size: u64,
-    csum: Hash,
-    delta_csum: Vec<Hash>,
+    filesize: u64,
+    hash: u64,
+    chunk_size: u64,
+    chunk_hash_len: u16,
+    chunk_hash: Vec<u64>,
 }
 ```
-The `TeleportDelta` option is included when the client receives an `Overwrite` `ack` value. This
+The `TeleportDelta` option is included when the client receives an `Overwrite` `feature` value. This
 struct is constructed to inform to the client what chunks need to be sent to the server to perform
 a delta file transfer. Delta file transfers can save valuable time by only transferring parts of
-the file that are different. The `size` value is sent to indicate what the size of the file that
-exists on the server is, to be compared with the file size on the client. The `delta_size` relates
-how large of blocks of data are to be used for the delta chunks. `csum` is a Blake3 hash value of
-the entire file on the server, and `delta_csum` is a vector of Blake3 hash values for each chunk
-of length `delta_size` in the file. The Blake3 hash values are 32 bytes in length, so the length
-of the vector must be evenly divisible by 32.
+the file that are different. The `filesize` value is sent to indicate what the size of the file that
+exists on the server is, to be compared with the file size on the client. The `chunk_size` relates
+how large of blocks of data are to be used for the delta chunks. `hash` is a xxHash3 hash value of
+the entire file on the server, and `chunk_hash` is a vector of xxHash3 hash values for each chunk
+of length `chunk_size` in the file. The xxHash3 hash values are 8 bytes in length and are stored as u64.
 
-Once the server replies back to the client with a `Proceed` or `Overwrite` `TeleportInitAck` packet,
-the client will begin sending data. If the server sent an `Overwrite` ack, then the client will
-read in `delta_size` chunks and hash them with Blake3. If the hash value matches for the vector
-value in `delta_csum` then it will not send the chunk and will iterate to the next one. When a hash
+Once the server replies back to the client with a `Proceed` `TeleportInitAck` packet,
+the client will begin sending data. If the server sent an `Overwrite` feature back, then the client will
+read in `chunk_size` chunks and hash them with xxHash3. If the hash value matches for the vector
+value in `chunk_hash` then it will not send the chunk and will iterate to the next one. When a hash
 value does not match, indicating a chunk was changed, or when the server is not overwriting a file,
 the client will chunk up the file to be transferred and send it to the server using `TeleportData`
 structs, defined as:
 ```rust
 pub struct TeleportData {
-    length: u32,
     offset: u64,
+    length: u32,
     data: Vec<u8>,
-    checksum: u8
 }
 ```
 
 The `length` value is the size of the `data` vector in bytes. The `offset` value is the location in
 the file to begin writing the chunk to. The `data` vector is a vector of unsigned bytes of data that
-are the file data. The `checksum` byte is a simple byte addition modulo `0xff` across the entire packet.
+are the file data.
 
 Once the file is completely transferred the TCP connection is closed. If there is another file to
 transfer from the client, a new TCP connection is made.
-
-
-# Proposed v0.6.0 Protocol Specification
-
-The `v0.6.0` Teleport protocol will be a major rewrite of the Teleport protocol. The goal of this rewrite
-is to simplify the protocol processing required and enable a better framework for future features to be
-added easily.
-
-An encryption option will be added. This will ideally take place at the beginning of a file transfer,
-before the `TeleportInit` packet. Anything in the packets after the optional `iv` field in the header would be
-encrypted after the handshake has completed. The encryption will be optional based on an argument passed
-on the command line to enable it, due to encryption causing a longer transfer time. There will also be an
-option to require the server to only respond to encrypted requests.
-
-## v0.6.0
-```rust
-pub struct TeleportHeader {
-    protocol: u64, // [ 'T', 'E', 'L', 'E', 'P', 'O', 'R', 'T' ]
-    packet_len: u32,
-    action: TeleportAction, // as u8
-    iv: Option<[u8; 12]>,
-}
-
-pub enum TeleportAction {
-    Init,
-    InitAck,
-    Data,
-    Encrypt,
-    EncryptAck,
-}
-
-// Client to Server
-pub struct TeleportEncrypt {
-    header: TeleportHeader,
-    pubkey_c: [u8; 32],
-    checksum: u8,
-}
-
-// Server to client
-pub struct TeleportEncryptAck {
-    header: TeleportHeader,
-    pubkey_s: [u8; 32],
-    checksum: u8,
-}
-
-// Client to server
-pub struct TeleportInit {
-    header: TeleportHeader,
-    version: [u16; 3], // [ major, minor, patch ]
-    features: TeleportFeatures, // request features: delta, overwrite, save backup/original, etc, as u32
-    chmod: u32,
-    filesize: u64,
-    filename_len: u16,
-    filename: Vec<char>,
-    checksum: u8,
-}
-
-pub enum TeleportFeatures {
-    NewFile,    // Creating a new file on transfer
-    Delta,      // Enable delta file transfer
-    Overwrite,  // Overwrite file, if exists on server
-    Backup,     // Backup original, if exists on server
-    Rename,     // Rename transfer, if exists on server
-}
-
-// Server to client
-pub struct TeleportInitAck {
-    header: TeleportHeader,
-    status: TeleportStatus,             // Response status, as u8
-    version: [u16; 3],                  // Server version
-    features: Option<TeleportFeatures>, // response features: new file, delta, overwrite, backup, rename, etc. features present if status is good, as u32
-    delta: Option<TeleportDelta>        // included if delta feature enabled
-    checksum: u8,
-}
-
-pub enum TeleportStatus {
-    Proceed,        // Success
-    NoOverwrite,    // Error
-    NoSpace,        // Error
-    NoPermission,   // Error
-    WrongVersion,   // Error
-    UnknownAction,  // Error
-    BadChecksum,    // Error
-}
-
-pub struct TeleportDelta {
-    size: u64,                  // Size of file
-    checksum: Hash,             // File checksum
-    chunk_size: u64,            // Size of chunk
-    delta_checksum_len: u16,    // Length of Vec of chunk checksums
-    delta_checksum: Vec<Hash>,  // Vec of chunk checksums
-}
-
-// Client to server
-pub struct TeleportData {
-    header: TeleportHeader,
-    offset: u64,            // Offset from beginning of file for data
-    data_len: u32,          // Length of Vec of data
-    data: Vec<u8>,          // File data
-    checksum: u8
-}
-```
