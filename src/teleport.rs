@@ -260,6 +260,7 @@ pub enum TeleportStatus {
     NoSpace,
     NoPermission,
     WrongVersion,
+    RequiresEncryption,
     EncryptionError,
     UnknownAction,
 }
@@ -274,11 +275,14 @@ impl TryFrom<u8> for TeleportStatus {
             x if x == TeleportStatus::NoSpace as u8 => Ok(TeleportStatus::NoSpace),
             x if x == TeleportStatus::NoPermission as u8 => Ok(TeleportStatus::NoPermission),
             x if x == TeleportStatus::WrongVersion as u8 => Ok(TeleportStatus::WrongVersion),
+            x if x == TeleportStatus::RequiresEncryption as u8 => {
+                Ok(TeleportStatus::RequiresEncryption)
+            }
             x if x == TeleportStatus::EncryptionError as u8 => Ok(TeleportStatus::EncryptionError),
             x if x == TeleportStatus::UnknownAction as u8 => Ok(TeleportStatus::UnknownAction),
             _ => Err(Error::new(
                 ErrorKind::InvalidData,
-                "TeleportStatus is invalid",
+                "Unknown TeleportStatus code - update Teleporter?",
             )),
         }
     }

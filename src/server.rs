@@ -33,6 +33,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
     // Listen for incoming connections
     for stream in listener.incoming() {
+        let args = opt.clone();
         let s = match stream {
             Ok(s) => s,
             _ => continue,
@@ -40,7 +41,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         // Receive connections in recv function
         let recv_list_clone = Arc::clone(&recv_list);
         thread::spawn(move || {
-            recv(s, recv_list_clone, &opt.allow_dangerous_filepath).unwrap();
+            recv(s, recv_list_clone, args).unwrap();
         });
     }
 
@@ -73,11 +74,7 @@ fn rm_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
 }
 
 /// Recv receives filenames and file data for a file
-fn recv(
-    mut stream: TcpStream,
-    recv_list: Arc<Mutex<Vec<String>>>,
-    allow_dangerous_filepath: &bool,
-) -> Result<(), Error> {
+fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>, opt: Opt) -> Result<(), Error> {
     let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
     let mut file: File;
@@ -94,6 +91,9 @@ fn recv(
         utils::send_packet(&mut stream, TeleportAction::EcdhAck, &None, ctx.serialize())?;
         enc = Some(ctx);
         packet = utils::recv_packet(&mut stream, &enc)?;
+    } else if opt.must_encrypt {
+        let resp = TeleportInitAck::new(TeleportStatus::RequiresEncryption);
+        return send_ack(resp, &mut stream, &enc);
     }
 
     let mut header = TeleportInit::new(TeleportFeatures::NewFile);
@@ -120,7 +120,7 @@ fn recv(
         return send_ack(resp, &mut stream, &enc);
     }
 
-    if !allow_dangerous_filepath && filename.starts_with('/') {
+    if !opt.allow_dangerous_filepath && filename.starts_with('/') {
         // Remove any preceeding '/'
         filename.remove(0);
 
