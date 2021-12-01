@@ -5,6 +5,7 @@ use x25519_dalek::{EphemeralSecret, PublicKey};
 #[derive(Debug, PartialEq)]
 pub struct TeleportHeader {
     protocol: u64,
+    data_len: u32,
     pub action: u8,
     pub iv: Option<[u8; 12]>,
     pub data: Vec<u8>,
@@ -24,6 +25,7 @@ impl TeleportHeader {
     pub fn new(action: TeleportAction) -> TeleportHeader {
         TeleportHeader {
             protocol: PROTOCOL,
+            data_len: 0,
             action: action as u8,
             iv: None,
             data: Vec::<u8>::new(),
@@ -37,8 +39,8 @@ impl TeleportHeader {
         out.append(&mut self.protocol.to_le_bytes().to_vec());
 
         // Add data length
-        let data_len = self.data.len() as u32;
-        out.append(&mut data_len.to_le_bytes().to_vec());
+        self.data_len = self.data.len() as u32;
+        out.append(&mut self.data_len.to_le_bytes().to_vec());
 
         // Add action code
         let mut action = self.action as u8;
@@ -68,7 +70,7 @@ impl TeleportHeader {
         }
 
         // Extract data length
-        let data_len = buf.read_u32::<LittleEndian>().unwrap() as usize;
+        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
         let mut data_ofs = 13;
 
         // Extract action code
@@ -87,7 +89,7 @@ impl TeleportHeader {
 
         // Extract data
         self.data = input[data_ofs..].to_vec();
-        if self.data.len() != data_len {
+        if self.data.len() != self.data_len as usize {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "Data is not the expected length",
@@ -557,6 +559,7 @@ mod tests {
         test.data.append(&mut TESTDATA.to_vec());
         test.action |= TeleportAction::Encrypted as u8;
         test.iv = Some(*TESTHEADERIV);
+        test.data_len = 17;
         let mut t = TeleportHeader::new(TeleportAction::Init);
         t.deserialize(TESTHEADER.to_vec()).unwrap();
         assert_eq!(t, test);
