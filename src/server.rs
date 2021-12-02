@@ -13,7 +13,10 @@ pub fn run(opt: Opt) -> Result<(), Error> {
     let listener = match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
         Ok(l) => l,
         Err(s) => {
-            println!("Error binding to port: {:?}", &opt.port);
+            println!(
+                "Cannot bind to port: {:?}. Is Teleporter already running?",
+                &opt.port
+            );
             return Err(s);
         }
     };
