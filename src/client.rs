@@ -240,6 +240,10 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
                 );
                 break;
             }
+            TeleportStatus::RequiresEncryption => {
+                println!("Error: The server requires encryption");
+                break;
+            }
             TeleportStatus::EncryptionError => {
                 println!("Error initializing encryption handshake");
                 break;

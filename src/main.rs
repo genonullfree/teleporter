@@ -21,7 +21,7 @@ mod utils;
 
 /// Teleporter is a simple application for sending files from Point A to Point B
 
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 pub struct Opt {
     /// List of filepaths to files that will be teleported
     #[structopt(short, long, parse(from_os_str), default_value = "")]
@@ -66,6 +66,10 @@ pub struct Opt {
     /// If the destination file exists, append a ".1" (or next available number) to the filename instead of overwriting
     #[structopt(short, long)]
     filename_append: bool,
+
+    /// Require encryption for incoming connections to the server
+    #[structopt(short, long)]
+    must_encrypt: bool,
 }
 
 const PROTOCOL: u64 = 0x54524f50454c4554;
