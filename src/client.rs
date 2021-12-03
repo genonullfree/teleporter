@@ -3,9 +3,7 @@ use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
-use std::hash::Hasher;
 use std::path::Path;
-use xxhash_rust::xxh3;
 
 #[derive(Debug)]
 struct Replace {
@@ -135,10 +133,10 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             }
         };
 
-        let thread_file = filepath.clone().to_string();
+        let thread_file = File::open(&filepath)?;
         let handle = match opt.overwrite && !opt.no_delta {
             true => Some(thread::spawn(move || {
-                utils::calc_file_hash(thread_file).unwrap()
+                utils::calc_delta_hash(&thread_file).unwrap()
             })),
             false => None,
         };
@@ -235,13 +233,13 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             }
             TeleportStatus::WrongVersion => {
                 println!(
-                    "Error: Version mismatch! Server: {:?} Us: {}",
+                    "Version mismatch! Server: {:?} Us: {}",
                     recv.version, VERSION
                 );
                 break;
             }
             TeleportStatus::RequiresEncryption => {
-                println!("Error: The server requires encryption");
+                println!("The server requires encryption");
                 break;
             }
             TeleportStatus::EncryptionError => {
@@ -252,17 +250,17 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
         };
 
         let csum_recv = recv.delta.as_ref().map(|r| r.hash);
-        let mut hash: Option<u64> = None;
+        let mut file_delta: Option<TeleportDelta> = None;
         if utils::check_feature(&recv.features, TeleportFeatures::Overwrite) {
-            hash = handle.map(|s| s.join().expect("calc_file_hash panicked"));
+            file_delta = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 
-        if hash != None && hash == csum_recv {
+        if file_delta.is_some() && file_delta.as_ref().unwrap().hash == csum_recv.unwrap() {
             // File matches hash
             send_data_complete(stream, &enc, file)?;
         } else {
             // Send file data
-            send(stream, file, &header, &enc, recv.delta)?;
+            send(stream, file, &header, &enc, recv.delta, file_delta)?;
         }
 
         let duration = start_time.elapsed();
@@ -298,20 +296,42 @@ fn send(
     header: &TeleportInit,
     enc: &Option<TeleportEnc>,
     delta: Option<TeleportDelta>,
+    file_delta: Option<TeleportDelta>,
 ) -> Result<(), Error> {
     let mut buf = Vec::<u8>::new();
-    let mut hash_list = Vec::<u64>::new();
     match delta {
-        Some(d) => {
-            buf.resize(d.chunk_size as usize, 0);
-            hash_list = d.chunk_hash;
-        }
+        Some(ref d) => buf.resize(d.chunk_size as usize, 0),
         None => buf.resize(4096, 0),
     }
+
+    let compare_delta = delta.is_some() && file_delta.is_some();
+    let delta_len = if delta.is_some() {
+        delta.as_ref().unwrap().chunk_hash.len()
+    } else {
+        0
+    };
+    let file_delta_len = if file_delta.is_some() {
+        file_delta.as_ref().unwrap().chunk_hash.len()
+    } else {
+        0
+    };
 
     // Send file data
     let mut sent = 0;
     loop {
+        // Check if hash matches, if so: skip chunk
+        let index = sent / buf.len();
+        if compare_delta
+            && index < delta_len
+            && index < file_delta_len
+            && delta.as_ref().unwrap().chunk_hash[index]
+                == file_delta.as_ref().unwrap().chunk_hash[index]
+        {
+            sent += buf.len();
+            continue;
+        }
+
+        file.seek(SeekFrom::Start(sent as u64))?;
         // Read a chunk of the file
         let len = match file.read(&mut buf) {
             Ok(l) => l,
@@ -321,17 +341,6 @@ fn send(
         // If a length of 0 was read, we're done sending
         if len == 0 {
             break;
-        }
-
-        // Check if hash matches, if so: skip chunk
-        let index = sent / buf.len();
-        if !hash_list.is_empty() && index < hash_list.len() {
-            let mut hasher = xxh3::Xxh3::new();
-            hasher.write(&buf);
-            if hash_list[index] == hasher.finish() {
-                sent += len;
-                continue;
-            }
         }
 
         let data = &buf[..len];
