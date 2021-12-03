@@ -155,36 +155,6 @@ fn gen_chunk_size(file_size: u64) -> usize {
     chunk as usize
 }
 
-// Called from client
-pub fn calc_file_hash(filename: String) -> Result<u64, Error> {
-    let mut hasher = xxh3::Xxh3::new();
-    let mut buf = Vec::<u8>::new();
-
-    let mut file = File::open(filename)?;
-    let meta = file.metadata()?;
-
-    buf.resize(gen_chunk_size(meta.len()), 0);
-
-    file.seek(SeekFrom::Start(0))?;
-
-    loop {
-        // Read a chunk of the file
-        let len = match file.read(&mut buf) {
-            Ok(l) => l,
-            Err(s) => return Err(s),
-        };
-        if len == 0 {
-            break;
-        }
-
-        hasher.write(&buf);
-    }
-
-    file.seek(SeekFrom::Start(0))?;
-
-    Ok(hasher.finish())
-}
-
 pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), Error> {
     if let Some(o) = opt {
         *o |= add as u32;

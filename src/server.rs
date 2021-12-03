@@ -44,7 +44,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
         // Receive connections in recv function
         let recv_list_clone = Arc::clone(&recv_list);
         thread::spawn(move || {
-            recv(s, recv_list_clone, args).unwrap();
+            handle_connection(s, recv_list_clone, args).unwrap();
         });
     }
 
@@ -69,15 +69,18 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
     io::stdout().flush().unwrap();
 }
 
-fn rm_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
+fn rm_filename_from_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
     let mut recv_data = list.lock().unwrap();
     recv_data.retain(|x| x != filename);
     print_list(&recv_data);
     drop(recv_data);
 }
 
-/// Recv receives filenames and file data for a file
-fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>, opt: Opt) -> Result<(), Error> {
+fn handle_connection(
+    mut stream: TcpStream,
+    recv_list: Arc<Mutex<Vec<String>>>,
+    opt: Opt,
+) -> Result<(), Error> {
     let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
     let mut file: File;
@@ -123,9 +126,11 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>, opt: Opt) -> 
         return send_ack(resp, &mut stream, &enc);
     }
 
-    if !opt.allow_dangerous_filepath && filename.starts_with('/') {
-        // Remove any preceeding '/'
-        filename.remove(0);
+    if !opt.allow_dangerous_filepath {
+        if filename.starts_with('/') {
+            // Remove any preceeding '/'
+            filename.remove(0);
+        }
 
         // Prohibit directory traversal
         filename = filename.replace("../", "");
@@ -214,7 +219,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>, opt: Opt) -> 
                 "Connection closed (reason: {:?}). Aborted {} transfer.",
                 e, &filename
             );
-            rm_list(&filename, &recv_list);
+            rm_filename_from_list(&filename, &recv_list);
             return Ok(());
         }
     }
@@ -279,7 +284,7 @@ fn recv(mut stream: TcpStream, recv_list: Arc<Mutex<Vec<String>>>, opt: Opt) -> 
         }
     }
 
-    rm_list(&filename, &recv_list);
+    rm_filename_from_list(&filename, &recv_list);
 
     Ok(())
 }
