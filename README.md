@@ -63,7 +63,7 @@ For example, given the following command:
 ```bash
 ./teleporter -i ~/Downloads/ubuntu-20.04.3-live-server-arm64.iso:/tmp/ubuntu.iso -k
 ```
-(and assuming the server was started with `--allow-dangerous-filepath`), Teleporter will first attempt to open `~/Downloads/ubuntu-20.04.3-live-server-arm64.iso:/tmp/ubuntu.iso`, if that fails, it will attempt to split the path on `:` and open `~/Downloads/ubuntu-20.04.3-live-server-arm64.iso`. If that succeeds, then it knows it is a rename / copy-to operation and will set the destination filepath to be the second part of the string: `/tmp/ubuntu.iso`. On the server, it will only receive the file for `/tmp/ubuntu.iso`. If the `-k` argument was ommitted, the server would just receive the original file renamed as `ubuntu.iso`.
+(and assuming the server was started with `--allow-dangerous-filepath`), Teleporter will first attempt to open `~/Downloads/ubuntu-20.04.3-live-server-arm64.iso:/tmp/ubuntu.iso`, if that fails, it will attempt to split the path on `:` and open `~/Downloads/ubuntu-20.04.3-live-server-arm64.iso`. If that succeeds, then it knows it is a rename / copy-to operation and will set the destination filepath to be the second part of the string: `/tmp/ubuntu.iso`. On the server, it will only receive the file for `/tmp/ubuntu.iso`. If the `-k` argument was omitted, the server would just receive the original file renamed as `ubuntu.iso`.
 
 # Installation
 
