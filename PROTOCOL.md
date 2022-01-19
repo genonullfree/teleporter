@@ -19,7 +19,7 @@ pub struct TeleportHeader {
 }
 ```
 
-The protocol field is alwasy `TELEPORT`. The `data_len` is the length of the data field in the packet, which is calculated by adding the `data_len` value with the length of the `protocol`, `data_len`, `action` fields, and optionally `iv` depending on the value in `action` (`8 + 4 + 1` + `12` if `iv.is_some()`). The vector of `data` is deserialized based on what the value of `action` is. `TeleportAction` is defined here:
+The protocol field is always `TELEPORT`. The `data_len` is the length of the data field in the packet, which is calculated by adding the `data_len` value with the length of the `protocol`, `data_len`, `action` fields, and optionally `iv` depending on the value in `action` (`8 + 4 + 1` + `12` if `iv.is_some()`). The vector of `data` is deserialized based on what the value of `action` is. `TeleportAction` is defined here:
 ```rust
 pub enum TeleportAction {
     Init = 0x01,
