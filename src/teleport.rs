@@ -447,7 +447,7 @@ impl TeleportDelta {
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
         let mut buf: &[u8] = input;
 
-        if input.len() < 26 {
+        if input.len() < 22 {
             return Err(Error::new(
                 ErrorKind::InvalidData,
                 "Not enough data for Delta deserialize",
@@ -542,7 +542,7 @@ mod tests {
         101,
     ];
     const TESTDELTA: &[u8] = &[
-        177, 104, 222, 58, 0, 0, 0, 0, 57, 48, 0, 0, 0, 0, 0, 0, 21, 205, 91, 7, 0, 0, 0, 0, 0, 0,
+        177, 104, 222, 58, 0, 0, 0, 0, 57, 48, 0, 0, 0, 0, 0, 0, 21, 205, 91, 7, 0, 0,
     ];
     const TESTDATAPKT: &[u8] = &[49, 212, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 1, 2, 3, 4, 5];
     const TESTINITACK: &[u8] = &[0, 0, 0, 6, 0, 0, 0, 5, 0, 0, 0];
@@ -553,7 +553,7 @@ mod tests {
         t.data.append(&mut TESTDATA.to_vec());
         t.action |= TeleportAction::Encrypted as u8;
         t.iv = Some(*TESTHEADERIV);
-        let s = t.serialize();
+        let s = t.serialize().unwrap();
         assert_eq!(s, TESTHEADER);
     }
 
@@ -622,7 +622,7 @@ mod tests {
         test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
-        let out = test.serialize();
+        let out = test.serialize().unwrap();
         assert_eq!(out, TESTINIT);
     }
 
@@ -651,7 +651,7 @@ mod tests {
         test.chunk_size = 123456789;
         test.chunk_hash = Vec::<u64>::new();
 
-        let out = test.serialize();
+        let out = test.serialize().unwrap();
 
         assert_eq!(out, TESTDELTA);
     }
@@ -677,7 +677,7 @@ mod tests {
         test.data_len = 5;
         test.data = vec![1, 2, 3, 4, 5];
 
-        let out = test.serialize();
+        let out = test.serialize().unwrap();
 
         assert_eq!(out, TESTDATAPKT);
     }
@@ -701,7 +701,7 @@ mod tests {
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
         test.version = [0, 6, 0];
-        let out = test.serialize();
+        let out = test.serialize().unwrap();
 
         assert_eq!(out, TESTINITACK);
     }
