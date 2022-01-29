@@ -204,7 +204,7 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
         println!("Sending file {}/{}: {}", num + 1, files.len(), &filename);
 
         // Send header first
-        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.serialize())?;
+        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.serialize()?)?;
 
         // Receive response from server
         let packet = utils::recv_packet(&mut stream, &enc)?;
@@ -284,7 +284,7 @@ fn send_data_complete(
     };
 
     // Send the data chunk
-    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize())?;
+    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize()?)?;
 
     Ok(())
 }
@@ -351,7 +351,7 @@ fn send(
         };
 
         // Send the data chunk
-        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize())?;
+        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize()?)?;
 
         sent += len;
         print_updates(sent as f64, header);

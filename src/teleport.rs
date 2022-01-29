@@ -32,14 +32,14 @@ impl TeleportHeader {
         }
     }
 
-    pub fn serialize(&mut self) -> Vec<u8> {
+    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
         let mut out = Vec::<u8>::new();
 
         // Add Protocol identifier
         out.append(&mut self.protocol.to_le_bytes().to_vec());
 
         // Add data length
-        self.data_len = self.data.len() as u32;
+        self.data_len = u32::try_from(self.data.len()).unwrap();
         out.append(&mut self.data_len.to_le_bytes().to_vec());
 
         // Add action code
@@ -57,7 +57,7 @@ impl TeleportHeader {
         // Add data
         out.append(&mut self.data.clone());
 
-        out
+        Ok(out)
     }
 
     pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
@@ -184,7 +184,7 @@ impl TeleportInit {
         }
     }
 
-    pub fn serialize(&self) -> Vec<u8> {
+    pub fn serialize(&self) -> Result<Vec<u8>, Error> {
         let mut out = Vec::<u8>::new();
 
         // Add version
@@ -202,13 +202,13 @@ impl TeleportInit {
         out.append(&mut self.filesize.to_le_bytes().to_vec());
 
         // Add filename_len
-        let flen = self.filename.len() as u16;
+        let flen = u16::try_from(self.filename.len()).unwrap();
         out.append(&mut flen.to_le_bytes().to_vec());
 
         // Add filename
         out.append(&mut self.filename.iter().map(|x| *x as u8).collect());
 
-        out
+        Ok(out)
     }
 
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
@@ -304,7 +304,7 @@ impl TeleportInitAck {
         }
     }
 
-    pub fn serialize(self) -> Vec<u8> {
+    pub fn serialize(self) -> Result<Vec<u8>, Error> {
         let mut out = Vec::<u8>::new();
 
         // Add status
@@ -318,7 +318,7 @@ impl TeleportInitAck {
 
         // If no features, return early
         if status != TeleportStatus::Proceed as u8 || self.features.is_none() {
-            return out;
+            return Ok(out);
         }
 
         // Add optional features
@@ -329,13 +329,13 @@ impl TeleportInitAck {
         if feat & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32
             || self.delta.is_none()
         {
-            return out;
+            return Ok(out);
         }
 
         // Add optional TeleportDelta data
-        out.append(&mut self.delta.unwrap().serialize());
+        out.append(&mut self.delta.unwrap().serialize()?);
 
-        out
+        Ok(out)
     }
 
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
@@ -376,7 +376,7 @@ impl TeleportInitAck {
 pub struct TeleportDelta {
     pub filesize: u64,
     pub hash: u64,
-    pub chunk_size: u64,
+    pub chunk_size: u32,
     chunk_hash_len: u16,
     pub chunk_hash: Vec<u64>,
 }
@@ -402,7 +402,7 @@ impl TeleportDelta {
         out
     }
 
-    pub fn serialize(self) -> Vec<u8> {
+    pub fn serialize(self) -> Result<Vec<u8>, Error> {
         let mut out = Vec::<u8>::new();
 
         // Add file size
@@ -415,13 +415,13 @@ impl TeleportDelta {
         out.append(&mut self.chunk_size.to_le_bytes().to_vec());
 
         // Add delta vector length
-        let dlen = self.chunk_hash.len() as u16;
+        let dlen = u16::try_from(self.chunk_hash.len()).unwrap();
         out.append(&mut dlen.to_le_bytes().to_vec());
 
         // Add delta vector
         out.append(&mut TeleportDelta::delta_serial(&self.chunk_hash));
 
-        out
+        Ok(out)
     }
 
     fn delta_deserial(input: &[u8], len: u16) -> Result<Vec<u64>, Error> {
@@ -460,7 +460,7 @@ impl TeleportDelta {
         self.hash = buf.read_u64::<LittleEndian>().unwrap();
 
         // Extract chunk size
-        self.chunk_size = buf.read_u64::<LittleEndian>().unwrap();
+        self.chunk_size = buf.read_u32::<LittleEndian>().unwrap();
 
         // Extract delta vector length
         self.chunk_hash_len = buf.read_u16::<LittleEndian>().unwrap();
@@ -488,20 +488,20 @@ impl TeleportData {
         }
     }
 
-    pub fn serialize(&mut self) -> Vec<u8> {
+    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
         let mut out = Vec::<u8>::new();
 
         // Add offset
         out.append(&mut self.offset.to_le_bytes().to_vec());
 
         // Add data length
-        let length = self.data.len() as u32;
+        let length = u32::try_from(self.data.len()).unwrap();
         out.append(&mut length.to_le_bytes().to_vec());
 
         // Add data
         out.append(&mut self.data);
 
-        out
+        Ok(out)
     }
 
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
