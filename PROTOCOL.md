@@ -133,7 +133,7 @@ values are specific error scenarios that cause the client to not proceed with th
 pub struct TeleportDelta {
     filesize: u64,
     hash: u64,
-    chunk_size: u64,
+    chunk_size: u32,
     chunk_hash_len: u16,
     chunk_hash: Vec<u64>,
 }
@@ -143,9 +143,10 @@ struct is constructed to inform to the client what chunks need to be sent to the
 a delta file transfer. Delta file transfers can save valuable time by only transferring parts of
 the file that are different. The `filesize` value is sent to indicate what the size of the file that
 exists on the server is, to be compared with the file size on the client. The `chunk_size` relates
-how large of blocks of data are to be used for the delta chunks. `hash` is a xxHash3 hash value of
-the entire file on the server, and `chunk_hash` is a vector of xxHash3 hash values for each chunk
-of length `chunk_size` in the file. The xxHash3 hash values are 8 bytes in length and are stored as u64.
+how large blocks of data are to be used for the delta chunks, with a max chunk size of 4GB. `hash` is a
+xxHash3 hash value of the entire file on the server, and `chunk_hash` is a vector of xxHash3 hash values
+for each chunk of length `chunk_size` in the file. The xxHash3 hash values are 8 bytes in length and are
+stored as u64.
 
 Once the server replies back to the client with a `Proceed` `TeleportInitAck` packet,
 the client will begin sending data. If the server sent an `Overwrite` feature back, then the client will

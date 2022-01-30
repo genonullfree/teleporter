@@ -53,11 +53,11 @@ pub fn run(opt: Opt) -> Result<(), Error> {
 
 fn send_ack(
     ack: TeleportInitAck,
-    mut stream: &mut TcpStream,
+    stream: &mut TcpStream,
     enc: &Option<TeleportEnc>,
 ) -> Result<(), Error> {
     // Encode and send response
-    utils::send_packet(&mut stream, TeleportAction::InitAck, enc, ack.serialize())
+    utils::send_packet(stream, TeleportAction::InitAck, enc, ack.serialize()?)
 }
 
 fn print_list(list: &MutexGuard<Vec<String>>) {

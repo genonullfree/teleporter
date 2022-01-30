@@ -87,7 +87,7 @@ pub fn send_packet(
     }
 
     // Serialize the message
-    let message = header.serialize();
+    let message = header.serialize()?;
 
     // Send the packet
     sock.write_all(&message)?;
@@ -152,7 +152,11 @@ fn gen_chunk_size(file_size: u64) -> usize {
         }
     }
 
-    chunk as usize
+    if chunk > u32::MAX as u64 {
+        u32::MAX as usize
+    } else {
+        chunk as usize
+    }
 }
 
 pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), Error> {
@@ -206,7 +210,7 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
 
     let mut out = teleport::TeleportDelta::new();
     out.filesize = file_size as u64;
-    out.chunk_size = buf.len() as u64;
+    out.chunk_size = buf.len().try_into().unwrap();
     out.hash = whole_hasher.finish();
     out.chunk_hash = chunk_hash;
 
