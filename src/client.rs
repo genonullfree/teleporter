@@ -14,8 +14,10 @@ struct Replace {
 fn get_file_list(opt: &Opt) -> Vec<String> {
     let mut files = Vec::<String>::new();
 
+    // Iterate over each item in list
     for item in opt.input.iter() {
         if opt.recursive && item.is_dir() {
+            // Recurse into directories
             let mut tmp = match scope_dir(&item.to_path_buf()) {
                 Ok(t) => t,
                 Err(_) => {
@@ -23,8 +25,10 @@ fn get_file_list(opt: &Opt) -> Vec<String> {
                     continue;
                 }
             };
+            // Append any files located
             files.append(&mut tmp);
         } else if item.exists() && item.is_file() {
+            // Append the file
             files.push(item.to_str().unwrap().to_string());
         }
     }
@@ -36,12 +40,15 @@ fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
     let path = Path::new(&dir);
     let mut files = Vec::<String>::new();
 
+    // Iterate over each item in directory
     for entry in path.read_dir().unwrap() {
         if entry.as_ref().unwrap().file_type().unwrap().is_dir() {
+            // Skip current directory
             if entry.as_ref().unwrap().path() == *dir {
                 continue;
             }
 
+            // Recurse into subdirectories
             let mut tmp = match scope_dir(&entry.as_ref().unwrap().path()) {
                 Ok(t) => t,
                 Err(_) => {
@@ -49,8 +56,10 @@ fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
                     continue;
                 }
             };
+            // Append any files located
             files.append(&mut tmp);
         } else if entry.as_ref().unwrap().file_type().unwrap().is_file() {
+            // Append the file
             files.push(entry.unwrap().path().to_str().unwrap().to_string());
         }
     }
@@ -68,17 +77,24 @@ fn find_replacements(opt: &mut Opt) -> Replace {
     let mut new: String;
     let mut poppers = Vec::<usize>::new();
 
+    // Iterate over the input list
     for (idx, item) in opt.input.iter().enumerate() {
+        // If it is a filename, no rename is happening
         if File::open(&item).is_ok() {
             continue;
         }
 
         let path = item.to_str().unwrap();
+
+        // If the path name contains ':'
         if path.contains(&":") {
+            // Split on ':' and use the first as original name
+            // and the second as the new name
             let mut split = path.split(':');
             orig = split.next().unwrap().to_string();
             new = split.next().unwrap().to_string();
 
+            // If the original name can be opened, proceed with rename
             if File::open(&orig).is_ok() {
                 rep.orig.push(orig.clone());
                 rep.new.push(new.clone());
@@ -87,13 +103,18 @@ fn find_replacements(opt: &mut Opt) -> Replace {
         }
     }
 
+    // For every replacement being made
     while !poppers.is_empty() {
+        // Get the index of the string to be replaced
         let idx = poppers.pop().unwrap();
+        // Remove the string from the input list
         opt.input.remove(idx);
+        // Insert the original file name to be used
         opt.input
             .insert(idx, PathBuf::from(&rep.orig[poppers.len()]));
     }
 
+    // Return the list of replacement names
     rep
 }
 
@@ -101,10 +122,13 @@ fn find_replacements(opt: &mut Opt) -> Replace {
 pub fn run(mut opt: Opt) -> Result<(), Error> {
     println!("Teleporter Client {}", VERSION);
 
+    // Generate a list of replacement names and fix up the input list
     let rep = find_replacements(&mut opt);
 
+    // Generate the file list
     let files = get_file_list(&opt);
 
+    // If file list is empty, exit
     if files.is_empty() {
         println!(" => No files to send. (Did you mean to add '-r'?)");
         return Ok(());
@@ -118,6 +142,8 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
 
         let filepath = item;
         let mut filename = filepath.clone().to_string();
+
+        // Locate and replace the filename of the transfer file, if renamed
         for (idx, item) in rep.orig.iter().enumerate() {
             if item.contains(&filepath.to_string()) {
                 filename = rep.new[idx].clone();
@@ -134,6 +160,7 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
         };
 
         let thread_file = File::open(&filepath)?;
+        // Skip if opt.no_delta present, otherwise calculate the delta hash of the file
         let handle = match opt.overwrite && !opt.no_delta {
             true => Some(thread::spawn(move || {
                 utils::calc_delta_hash(&thread_file).unwrap()
@@ -151,18 +178,27 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
                 .to_string();
         }
 
+        // Populate features
         let meta = file.metadata()?;
         let mut header = TeleportInit::new(TeleportFeatures::NewFile);
         let mut features: u32 = 0;
+
+        // Add delta flag by default
         if !opt.no_delta {
             features |= TeleportFeatures::Delta as u32;
         }
+
+        // Add overwrite flag if enabled
         if opt.overwrite {
             features |= TeleportFeatures::Overwrite as u32;
         }
+
+        // Add backup flag if enabled
         if opt.backup {
             features |= TeleportFeatures::Backup as u32;
         }
+
+        // Add rename flag if enabled
         if opt.filename_append {
             features |= TeleportFeatures::Rename as u32;
         }
@@ -189,10 +225,14 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             }
         };
 
+        // If encrypt is enabled
         if opt.encrypt {
+            // Generate EC keypair
             let mut ctx = TeleportEnc::new();
             let privkey = crypto::genkey(&mut ctx);
+            // Send pubkey
             utils::send_packet(&mut stream, TeleportAction::Ecdh, &None, ctx.serialize())?;
+            // Receive remote pubkey and generate session secret
             let packet = utils::recv_packet(&mut stream, &None)?;
             if packet.action == TeleportAction::EcdhAck as u8 {
                 ctx.deserialize(&packet.data)?;
@@ -249,13 +289,17 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             _ => (),
         };
 
+        // If TeleportDelta was received, else None
         let csum_recv = recv.delta.as_ref().map(|r| r.hash);
         let mut file_delta: Option<TeleportDelta> = None;
         if utils::check_feature(&recv.features, TeleportFeatures::Overwrite) {
             file_delta = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 
-        if file_delta.is_some() && file_delta.as_ref().unwrap().hash == csum_recv.unwrap() {
+        if csum_recv.is_some()
+            && file_delta.is_some()
+            && file_delta.as_ref().unwrap().hash == csum_recv.unwrap()
+        {
             // File matches hash
             send_data_complete(stream, &enc, file)?;
         } else {
@@ -263,6 +307,7 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             send(stream, file, &header, &enc, recv.delta, file_delta)?;
         }
 
+        // Print file transfer statistics
         let duration = start_time.elapsed();
         let speed = (header.filesize as f64 * 8.0) / duration.as_secs() as f64 / 1024.0 / 1024.0;
         println!(" done! Time: {:.2?} Speed: {:.3} Mbps", duration, speed);
@@ -299,11 +344,13 @@ fn send(
     file_delta: Option<TeleportDelta>,
 ) -> Result<(), Error> {
     let mut buf = Vec::<u8>::new();
+    // Set transfer chunk size to delta chunk size, or default to 4096
     match delta {
         Some(ref d) => buf.resize(d.chunk_size as usize, 0),
         None => buf.resize(4096, 0),
     }
 
+    // If present, get the lengths of the delta hash arrays
     let compare_delta = delta.is_some() && file_delta.is_some();
     let delta_len = if delta.is_some() {
         delta.as_ref().unwrap().chunk_hash.len()
