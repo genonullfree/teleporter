@@ -120,7 +120,10 @@ fn find_replacements(opt: &mut Opt) -> Replace {
 
 /// Client function sends filename and file data for each filepath
 pub fn run(mut opt: Opt) -> Result<(), Error> {
-    println!("Teleporter Client {}", VERSION);
+    print!("Teleporter Client {} => ", VERSION);
+    let start_time = Instant::now();
+    let mut sent = 0;
+    let mut skip = 0;
 
     // Generate a list of replacement names and fix up the input list
     let rep = find_replacements(&mut opt);
@@ -136,7 +139,7 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
 
     // For each filepath in the input vector...
     for (num, item) in files.iter().enumerate() {
-        let start_time = Instant::now();
+        let file_time = Instant::now();
 
         let mut enc: Option<TeleportEnc> = None;
 
@@ -241,8 +244,6 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             }
         }
 
-        println!("Sending file {}/{}: {}", num + 1, files.len(), &filename);
-
         // Send header first
         utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.serialize()?)?;
 
@@ -250,6 +251,13 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
         let packet = utils::recv_packet(&mut stream, &enc)?;
         let mut recv = TeleportInitAck::new(TeleportStatus::UnknownAction);
         recv.deserialize(&packet.data)?;
+
+        if num == 0 {
+            println!(
+                "Server {}.{}.{}",
+                recv.version[0], recv.version[1], recv.version[2]
+            );
+        }
 
         // Validate response
         match recv.status.try_into().unwrap() {
@@ -296,22 +304,34 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             file_delta = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 
+        println!("Sending file {}/{}: {}", num + 1, files.len(), &filename);
+
         if csum_recv.is_some()
             && file_delta.is_some()
             && file_delta.as_ref().unwrap().hash == csum_recv.unwrap()
         {
             // File matches hash
             send_data_complete(stream, &enc, file)?;
+            skip += 1;
         } else {
             // Send file data
             send(stream, file, &header, &enc, recv.delta, file_delta)?;
+            sent += 1;
         }
 
         // Print file transfer statistics
-        let duration = start_time.elapsed();
+        let duration = file_time.elapsed();
         let speed = (header.filesize as f64 * 8.0) / duration.as_secs() as f64 / 1024.0 / 1024.0;
         println!(" done! Time: {:.2?} Speed: {:.3} Mbps", duration, speed);
     }
+    let total_time = start_time.elapsed();
+    println!(
+        "Teleported {}/{}/{} Sent/Same/Total in {:.2?}",
+        sent,
+        skip,
+        sent + skip,
+        total_time
+    );
     Ok(())
 }
 
