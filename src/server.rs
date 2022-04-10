@@ -83,7 +83,6 @@ fn handle_connection(
 ) -> Result<(), Error> {
     let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
-    let mut file: File;
 
     let mut enc: Option<TeleportEnc> = None;
 
@@ -163,7 +162,7 @@ fn handle_connection(
     };
 
     // Open file for writing
-    file = match OpenOptions::new().read(true).write(true).open(&filename) {
+    let mut file = match OpenOptions::new().read(true).write(true).open(&filename) {
         Ok(f) => {
             if features & TeleportFeatures::Backup as u32 == TeleportFeatures::Backup as u32 {
                 let dest = filename.clone() + ".bak";
