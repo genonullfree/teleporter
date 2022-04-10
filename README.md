@@ -15,27 +15,29 @@ The protocol Teleporter implements to transfer files is called Teleport and is d
 Teleporter is a simple application for sending files from Point A to Point B
 
 USAGE:
-    teleporter [FLAGS] [OPTIONS]
-
-FLAGS:
-        --allow-dangerous-filepath    Allow absolute and relative file paths for transfers (server only) [WARNING:
-                                      potentially dangerous option, use at your own risk!]
-    -b, --backup                      Backup the destination file to a ".bak" extension if it exists and is being
-                                      overwritten (consecutive runs will replace the *.bak file)
-    -e, --encrypt                     Encrypt the file transfer using ECDH key-exchange and random keys
-    -f, --filename-append             If the destination file exists, append a ".1" (or next available number) to the
-                                      filename instead of overwriting
-    -h, --help                        Prints help information
-    -k, --keep-path                   Keep path info (recreate directory path on remote server)
-    -n, --no-delta                    Disable delta transfer (overwrite will transfer entire file)
-    -o, --overwrite                   Overwrite remote file
-    -r, --recursive                   Recurse into directories on send
-    -V, --version                     Prints version information
+    teleporter [OPTIONS]
 
 OPTIONS:
-    -d, --dest <dest>         Destination teleporter IP address [default: 127.0.0.1]
-    -i, --input <input>...    List of filepaths to files that will be teleported [default: ]
-    -p, --port <port>         Destination teleporter Port, or Port to listen on [default: 9001]
+        --allow-dangerous-filepath    Allow absolute and relative file paths for transfers (server
+                                      only) [WARNING: potentially dangerous option, use at your own
+                                      risk!]
+    -b, --backup                      Backup the destination file to a ".bak" extension if it exists
+                                      and is being overwritten (consecutive runs will replace the
+                                      *.bak file)
+    -d, --dest <DEST>                 Destination teleporter IP address [default: 127.0.0.1]
+    -e, --encrypt                     Encrypt the file transfer using ECDH key-exchange and random
+                                      keys
+    -f, --filename-append             If the destination file exists, append a ".1" (or next
+                                      available number) to the filename instead of overwriting
+    -h, --help                        Print help information
+    -i, --input <INPUT>               List of filepaths to files that will be teleported [default: ]
+    -k, --keep-path                   Keep path info (recreate directory path on remote server)
+    -m, --must-encrypt                Require encryption for incoming connections to the server
+    -n, --no-delta                    Disable delta transfer (overwrite will transfer entire file)
+    -o, --overwrite                   Overwrite remote file
+    -p, --port <PORT>                 Destination teleporter Port, or Port to listen on [default:
+                                      9001]
+    -r, --recursive                   Recurse into directories on send
 ```
 
 To start a teleporter in server (receiving) mode, just run:

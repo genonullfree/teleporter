@@ -1,4 +1,3 @@
-use semver::Version;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::io::{Error, ErrorKind};
@@ -11,7 +10,9 @@ use std::result::Result;
 use std::str;
 use std::thread;
 use std::time::Instant;
-use structopt::StructOpt;
+
+use clap::Parser;
+use semver::Version;
 
 mod client;
 mod crypto;
@@ -21,7 +22,7 @@ mod utils;
 
 /// Teleporter is a simple application for sending files from Point A to Point B
 
-#[derive(Clone, Debug, StructOpt)]
+#[derive(Clone, Debug, Parser)]
 pub struct Opt {
     /// List of filepaths to files that will be teleported
     #[structopt(short, long, parse(from_os_str), default_value = "")]
@@ -77,7 +78,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     // Process arguments
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     let out;
 
     // If the input filepath list is empty, assume we're in server mode
