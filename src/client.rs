@@ -18,7 +18,7 @@ fn get_file_list(opt: &Opt) -> Vec<String> {
     for item in opt.input.iter() {
         if opt.recursive && item.is_dir() {
             // Recurse into directories
-            let mut tmp = match scope_dir(&item.to_path_buf()) {
+            let mut tmp = match scope_dir(item) {
                 Ok(t) => t,
                 Err(_) => {
                     println!("Error: Cannot read item: {:?}", item);

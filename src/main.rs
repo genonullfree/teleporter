@@ -79,15 +79,15 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 fn main() {
     // Process arguments
     let opt = Opt::parse();
-    let out;
 
     // If the input filepath list is empty, assume we're in server mode
-    if opt.input.len() == 1 && opt.input[0].to_str().unwrap() == "" {
-        out = server::run(opt);
+    let out = if opt.input.len() == 1 && opt.input[0].to_str().unwrap() == "" {
+        server::run(opt)
     // Else, we have files to send so we're in client mode
     } else {
-        out = client::run(opt);
-    }
+        client::run(opt)
+    };
+
     match out {
         Ok(()) => {}
         Err(s) => println!("Error: {}", s),
