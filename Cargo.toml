@@ -1,12 +1,12 @@
 [package]
 name = "teleporter"
-version = "0.9.3"
+version = "0.9.4"
 authors = ["geno nullfree <nullfree.geno@gmail.com>"]
 license = "BSD-3-Clause"
 description = "A small utility to send files quickly from point A to point B"
 readme = "README.md"
-homepage = "https://github.com/genonullfree/teleport.git"
-repository = "https://github.com/genonullfree/teleport.git"
+homepage = "https://github.com/genonullfree/teleporter.git"
+repository = "https://github.com/genonullfree/teleporter.git"
 keywords = ["netcat", "teleport", "teleporter", "transfer", "send"]
 categories = ["command-line-utilities", "network-programming"]
 edition = "2021"
