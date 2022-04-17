@@ -25,51 +25,51 @@ mod utils;
 #[derive(Clone, Debug, Parser)]
 pub struct Opt {
     /// List of filepaths to files that will be teleported
-    #[structopt(short, long, parse(from_os_str), default_value = "")]
+    #[clap(short, long, multiple_values = true, default_value = "")]
     input: Vec<PathBuf>,
 
     /// Destination teleporter IP address
-    #[structopt(short, long, default_value = "127.0.0.1")]
+    #[clap(short, long, default_value = "127.0.0.1")]
     dest: String,
 
     /// Destination teleporter Port, or Port to listen on
-    #[structopt(short, long, default_value = "9001")]
+    #[clap(short, long, default_value = "9001")]
     port: u16,
 
     /// Overwrite remote file
-    #[structopt(short, long)]
+    #[clap(short, long)]
     overwrite: bool,
 
     /// Recurse into directories on send
-    #[structopt(short, long)]
+    #[clap(short, long)]
     recursive: bool,
 
     /// Encrypt the file transfer using ECDH key-exchange and random keys
-    #[structopt(short, long)]
+    #[clap(short, long)]
     encrypt: bool,
 
     /// Disable delta transfer (overwrite will transfer entire file)
-    #[structopt(short, long)]
+    #[clap(short, long)]
     no_delta: bool,
 
     /// Keep path info (recreate directory path on remote server)
-    #[structopt(short, long)]
+    #[clap(short, long)]
     keep_path: bool,
 
     /// Allow absolute and relative file paths for transfers (server only) [WARNING: potentially dangerous option, use at your own risk!]
-    #[structopt(long)]
+    #[clap(long)]
     allow_dangerous_filepath: bool,
 
     /// Backup the destination file to a ".bak" extension if it exists and is being overwritten (consecutive runs will replace the *.bak file)
-    #[structopt(short, long)]
+    #[clap(short, long)]
     backup: bool,
 
     /// If the destination file exists, append a ".1" (or next available number) to the filename instead of overwriting
-    #[structopt(short, long)]
+    #[clap(short, long)]
     filename_append: bool,
 
     /// Require encryption for incoming connections to the server
-    #[structopt(short, long)]
+    #[clap(short, long)]
     must_encrypt: bool,
 }
 
