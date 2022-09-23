@@ -1,7 +1,7 @@
 use crate::teleport::TeleportEnc;
 use crate::{Error, ErrorKind};
-use aes_gcm::aead::{Aead, NewAead};
-use aes_gcm::{Aes256Gcm, Key};
+use aes_gcm::aead::{Aead};
+use aes_gcm::{Aes256Gcm, KeyInit};
 use generic_array::GenericArray;
 use rand_core::OsRng;
 use x25519_dalek::{EphemeralSecret, PublicKey};
@@ -14,7 +14,7 @@ pub fn genkey(ctx: &mut TeleportEnc) -> EphemeralSecret {
 }
 
 pub fn decrypt(key: &[u8; 32], nonce: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, Error> {
-    let key = Key::from_slice(key);
+    let key = GenericArray::from_slice(key);
     let cipher = Aes256Gcm::new(key);
     let gen_nonce = GenericArray::from_slice(&nonce);
 
@@ -26,7 +26,7 @@ pub fn decrypt(key: &[u8; 32], nonce: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>,
 }
 
 pub fn encrypt(key: &[u8; 32], nonce: Vec<u8>, input: Vec<u8>) -> Result<Vec<u8>, Error> {
-    let key = Key::from_slice(key);
+    let key = GenericArray::from_slice(key);
     let cipher = Aes256Gcm::new(key);
     let gen_nonce = GenericArray::from_slice(&nonce);
     match cipher.encrypt(gen_nonce, input.as_ref()) {
