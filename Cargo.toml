@@ -22,6 +22,8 @@ generic-array = "0.14.4"
 x25519-dalek = "1.2.0"
 semver = "1.0.4"
 rand = "0.7.3"
+deku = "0.13.1"
+thiserror = "1.0.35"
 
 [profile.size]
 inherits = "release"

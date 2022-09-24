@@ -1,5 +1,6 @@
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
+use deku::prelude::*;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 #[derive(Debug, PartialEq)]
@@ -472,10 +473,12 @@ impl TeleportDelta {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, DekuRead, DekuWrite, PartialEq, Eq)]
+#[deku(endian = "little")]
 pub struct TeleportData {
     pub offset: u64,
     pub data_len: u32,
+    #[deku(count = "data_len")]
     pub data: Vec<u8>,
 }
 

@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Server function sets up a listening socket for any incoming connnections
-pub fn run(opt: Opt) -> Result<(), Error> {
+pub fn run(opt: Opt) -> Result<(), TeleportError> {
     // Bind to all interfaces on specified Port
     let listener = match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
         Ok(l) => l,
@@ -17,7 +17,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
                 "Cannot bind to port: {:?}. Is Teleporter already running?",
                 &opt.port
             );
-            return Err(s);
+            return Err(TeleportError::Io(s));
         }
     };
 

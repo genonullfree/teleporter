@@ -1,8 +1,9 @@
 use crate::teleport::*;
 use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
-use crate::teleport::{TeleportInit, TeleportInitAck};
+use crate::teleport::{TeleportData, TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
+use deku::DekuContainerWrite;
 use std::path::Path;
 
 #[derive(Debug)]
@@ -119,7 +120,7 @@ fn find_replacements(opt: &mut Opt) -> Replace {
 }
 
 /// Client function sends filename and file data for each filepath
-pub fn run(mut opt: Opt) -> Result<(), Error> {
+pub fn run(mut opt: Opt) -> Result<(), TeleportError> {
     print!("Teleporter Client {} => ", VERSION);
     let start_time = Instant::now();
     let mut sent = 0;
@@ -158,7 +159,7 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
             Ok(f) => f,
             Err(s) => {
                 println!("Error opening file: {}", filepath);
-                return Err(s);
+                return Err(TeleportError::Io(s));
             }
         };
 
@@ -215,16 +216,13 @@ pub fn run(mut opt: Opt) -> Result<(), Error> {
         let mut stream = match TcpStream::connect(match addr.parse::<SocketAddr>() {
             Ok(a) => a,
             Err(_) => {
-                return Err(Error::new(
-                    ErrorKind::InvalidData,
-                    "Error with destination address",
-                ))
+                return Err(TeleportError::InvalidDest);
             }
         }) {
             Ok(s) => s,
             Err(s) => {
                 println!("Error connecting to: {}:{}", opt.dest, opt.port);
-                return Err(s);
+                return Err(TeleportError::Io(s));
             }
         };
 
@@ -339,7 +337,7 @@ fn send_data_complete(
     mut stream: TcpStream,
     enc: &Option<TeleportEnc>,
     file: File,
-) -> Result<(), Error> {
+) -> Result<(), TeleportError> {
     let meta = file.metadata()?;
 
     let mut chunk = TeleportData {
@@ -349,7 +347,7 @@ fn send_data_complete(
     };
 
     // Send the data chunk
-    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize()?)?;
+    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.to_bytes()?)?;
 
     Ok(())
 }
@@ -362,7 +360,7 @@ fn send(
     enc: &Option<TeleportEnc>,
     delta: Option<TeleportDelta>,
     file_delta: Option<TeleportDelta>,
-) -> Result<(), Error> {
+) -> Result<(), TeleportError> {
     let mut buf = Vec::<u8>::new();
     // Set transfer chunk size to delta chunk size, or default to 4096
     match delta {
@@ -402,7 +400,7 @@ fn send(
         // Read a chunk of the file
         let len = match file.read(&mut buf) {
             Ok(l) => l,
-            Err(s) => return Err(s),
+            Err(s) => return Err(TeleportError::Io(s)),
         };
 
         // If a length of 0 was read, we're done sending

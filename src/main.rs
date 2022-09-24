@@ -16,9 +16,11 @@ use semver::Version;
 
 mod client;
 mod crypto;
+mod errors;
 mod server;
 mod teleport;
 mod utils;
+use errors::TeleportError;
 
 /// Teleporter is a simple application for sending files from Point A to Point B
 
