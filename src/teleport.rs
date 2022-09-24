@@ -305,7 +305,7 @@ impl TeleportInitAck {
         }
     }
 
-    pub fn serialize(self) -> Result<Vec<u8>, Error> {
+    pub fn serialize(self) -> Result<Vec<u8>, TeleportError> {
         let mut out = Vec::<u8>::new();
 
         // Add status
@@ -334,12 +334,12 @@ impl TeleportInitAck {
         }
 
         // Add optional TeleportDelta data
-        out.append(&mut self.delta.unwrap().serialize()?);
+        out.append(&mut self.delta.unwrap().to_bytes()?);
 
         Ok(out)
     }
 
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
         let mut buf: &[u8] = input;
 
         // Extract status
@@ -365,20 +365,21 @@ impl TeleportInitAck {
         }
 
         // Extract optional TeleportDelta data
-        let mut delta = TeleportDelta::new();
-        delta.deserialize(&input[11..])?;
+        let (_, delta) = TeleportDelta::from_bytes((&input[11..], 0))?;
         self.delta = Some(delta);
 
         Ok(())
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, DekuRead, DekuWrite, PartialEq, Eq)]
+#[deku(endian = "little")]
 pub struct TeleportDelta {
     pub filesize: u64,
     pub hash: u64,
     pub chunk_size: u32,
     chunk_hash_len: u16,
+    #[deku(count = "chunk_hash_len")]
     pub chunk_hash: Vec<u64>,
 }
 
@@ -391,85 +392,6 @@ impl TeleportDelta {
             chunk_hash_len: 0,
             chunk_hash: Vec::<u64>::new(),
         }
-    }
-
-    fn delta_serial(input: &[u64]) -> Vec<u8> {
-        let mut out = Vec::<u8>::new();
-
-        for i in input {
-            out.append(&mut i.to_le_bytes().to_vec());
-        }
-
-        out
-    }
-
-    pub fn serialize(self) -> Result<Vec<u8>, Error> {
-        let mut out = Vec::<u8>::new();
-
-        // Add file size
-        out.append(&mut self.filesize.to_le_bytes().to_vec());
-
-        // Add file hash
-        out.append(&mut self.hash.to_le_bytes().to_vec());
-
-        // Add chunk size
-        out.append(&mut self.chunk_size.to_le_bytes().to_vec());
-
-        // Add delta vector length
-        let dlen = u16::try_from(self.chunk_hash.len()).unwrap();
-        out.append(&mut dlen.to_le_bytes().to_vec());
-
-        // Add delta vector
-        out.append(&mut TeleportDelta::delta_serial(&self.chunk_hash));
-
-        Ok(out)
-    }
-
-    fn delta_deserial(input: &[u8], len: u16) -> Result<Vec<u64>, Error> {
-        if input.len() % 8 != 0 || len as usize != input.len() / 8 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Cannot deserialize Vec<u64>",
-            ));
-        }
-
-        let mut out = Vec::<u64>::new();
-        let mut buf = input;
-        let mut count: u16 = len;
-        while count > 0 {
-            let a: u64 = buf.read_u64::<LittleEndian>().unwrap();
-            out.push(a);
-            count -= 1;
-        }
-
-        Ok(out)
-    }
-
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
-        let mut buf: &[u8] = input;
-
-        if input.len() < 22 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Not enough data for Delta deserialize",
-            ));
-        }
-
-        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
-
-        // Extract file hash
-        self.hash = buf.read_u64::<LittleEndian>().unwrap();
-
-        // Extract chunk size
-        self.chunk_size = buf.read_u32::<LittleEndian>().unwrap();
-
-        // Extract delta vector length
-        self.chunk_hash_len = buf.read_u16::<LittleEndian>().unwrap();
-
-        // Extract delta vector
-        self.chunk_hash = TeleportDelta::delta_deserial(buf, self.chunk_hash_len).unwrap();
-
-        Ok(())
     }
 }
 
@@ -617,7 +539,7 @@ mod tests {
         test.chunk_size = 123456789;
         test.chunk_hash = Vec::<u64>::new();
 
-        let out = test.serialize().unwrap();
+        let out = test.to_bytes().unwrap();
 
         assert_eq!(out, TESTDELTA);
     }
@@ -630,8 +552,7 @@ mod tests {
         test.chunk_size = 123456789;
         test.chunk_hash = Vec::<u64>::new();
 
-        let mut t = TeleportDelta::new();
-        t.deserialize(TESTDELTA).unwrap();
+        let (_, t) = TeleportDelta::from_bytes((&TESTDELTA, 0)).unwrap();
 
         assert_eq!(test, t);
     }
