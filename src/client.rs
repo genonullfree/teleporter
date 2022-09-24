@@ -12,7 +12,7 @@ struct Replace {
     new: Vec<String>,
 }
 
-fn get_file_list(opt: &Opt) -> Vec<String> {
+fn get_file_list(opt: &SendOpt) -> Vec<String> {
     let mut files = Vec::<String>::new();
 
     // Iterate over each item in list
@@ -68,7 +68,7 @@ fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
     Ok(files)
 }
 
-fn find_replacements(opt: &mut Opt) -> Replace {
+fn find_replacements(opt: &mut SendOpt) -> Replace {
     let mut rep = Replace {
         orig: Vec::<String>::new(),
         new: Vec::<String>::new(),
@@ -120,7 +120,7 @@ fn find_replacements(opt: &mut Opt) -> Replace {
 }
 
 /// Client function sends filename and file data for each filepath
-pub fn run(mut opt: Opt) -> Result<(), TeleportError> {
+pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
     print!("Teleporter Client {} => ", VERSION);
     let start_time = Instant::now();
     let mut sent = 0;

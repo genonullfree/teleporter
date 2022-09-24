@@ -24,8 +24,22 @@ use errors::TeleportError;
 
 /// Teleporter is a simple application for sending files from Point A to Point B
 
-#[derive(Clone, Debug, Parser)]
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
+pub enum Cmd {
+    Listen(ListenOpt),
+    Send(SendOpt),
+    //Command,
+}
+
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
 pub struct Opt {
+    /// Command
+    #[clap(subcommand)]
+    cmd: Cmd,
+}
+
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
+pub struct SendOpt {
     /// List of filepaths to files that will be teleported
     #[clap(short, long, multiple_values = true, default_value = "")]
     input: Vec<PathBuf>,
@@ -58,10 +72,6 @@ pub struct Opt {
     #[clap(short, long)]
     keep_path: bool,
 
-    /// Allow absolute and relative file paths for transfers (server only) [WARNING: potentially dangerous option, use at your own risk!]
-    #[clap(long)]
-    allow_dangerous_filepath: bool,
-
     /// Backup the destination file to a ".bak" extension if it exists and is being overwritten (consecutive runs will replace the *.bak file)
     #[clap(short, long)]
     backup: bool,
@@ -69,10 +79,21 @@ pub struct Opt {
     /// If the destination file exists, append a ".1" (or next available number) to the filename instead of overwriting
     #[clap(short, long)]
     filename_append: bool,
+}
+
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
+pub struct ListenOpt {
+    /// Allow absolute and relative file paths for transfers (server only) [WARNING: potentially dangerous option, use at your own risk!]
+    #[clap(long)]
+    allow_dangerous_filepath: bool,
 
     /// Require encryption for incoming connections to the server
     #[clap(short, long)]
     must_encrypt: bool,
+
+    /// Destination teleporter Port, or Port to listen on
+    #[clap(short, long, default_value = "9001")]
+    port: u16,
 }
 
 const PROTOCOL: u64 = 0x54524f50454c4554;
@@ -83,11 +104,10 @@ fn main() {
     let opt = Opt::parse();
 
     // If the input filepath list is empty, assume we're in server mode
-    let out = if opt.input.len() == 1 && opt.input[0].to_str().unwrap() == "" {
-        server::run(opt)
-    // Else, we have files to send so we're in client mode
-    } else {
-        client::run(opt)
+    let out = match opt.cmd {
+        Cmd::Listen(l) => server::run(l),
+        // Else, we have files to send so we're in client mode
+        Cmd::Send(s) => client::run(s),
     };
 
     match out {

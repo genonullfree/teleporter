@@ -9,7 +9,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Server function sets up a listening socket for any incoming connnections
-pub fn run(opt: Opt) -> Result<(), TeleportError> {
+pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
     // Bind to all interfaces on specified Port
     let listener = match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
         Ok(l) => l,
@@ -80,7 +80,7 @@ fn rm_filename_from_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
 fn handle_connection(
     mut stream: TcpStream,
     recv_list: Arc<Mutex<Vec<String>>>,
-    opt: Opt,
+    opt: ListenOpt,
 ) -> Result<(), TeleportError> {
     let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
