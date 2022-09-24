@@ -65,7 +65,7 @@ pub fn send_packet(
     action: TeleportAction,
     enc: &Option<TeleportEnc>,
     data: Vec<u8>,
-) -> Result<(), Error> {
+) -> Result<(), TeleportError> {
     let mut header = TeleportHeader::new(action);
 
     // If encryption is enabled

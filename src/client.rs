@@ -416,7 +416,7 @@ fn send(
         };
 
         // Send the data chunk
-        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize()?)?;
+        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.to_bytes()?)?;
 
         sent += len;
         print_updates(sent as f64, header);

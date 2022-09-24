@@ -490,43 +490,6 @@ impl TeleportData {
             data: Vec::<u8>::new(),
         }
     }
-
-    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
-        let mut out = Vec::<u8>::new();
-
-        // Add offset
-        out.append(&mut self.offset.to_le_bytes().to_vec());
-
-        // Add data length
-        let length = u32::try_from(self.data.len()).unwrap();
-        out.append(&mut length.to_le_bytes().to_vec());
-
-        // Add data
-        out.append(&mut self.data);
-
-        Ok(out)
-    }
-
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
-        let mut buf: &[u8] = input;
-
-        // Extract offset
-        self.offset = buf.read_u64::<LittleEndian>().unwrap();
-
-        // Extract data length
-        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
-
-        // Extract data
-        self.data = input[12..].to_vec();
-        if self.data.len() != self.data_len as usize {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Filename incorrect length",
-            ));
-        }
-
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -680,7 +643,7 @@ mod tests {
         test.data_len = 5;
         test.data = vec![1, 2, 3, 4, 5];
 
-        let out = test.serialize().unwrap();
+        let out = test.to_bytes().unwrap();
 
         assert_eq!(out, TESTDATAPKT);
     }
@@ -692,8 +655,7 @@ mod tests {
         test.data_len = 5;
         test.data = vec![1, 2, 3, 4, 5];
 
-        let mut t = TeleportData::new();
-        t.deserialize(TESTDATAPKT).unwrap();
+        let (_, t) = TeleportData::from_bytes((&TESTDATAPKT, 0)).unwrap();
 
         assert_eq!(test, t);
     }

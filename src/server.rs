@@ -2,6 +2,7 @@ use crate::teleport::*;
 use crate::teleport::{TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::*;
+use deku::DekuContainerRead;
 use std::fs;
 use std::fs::OpenOptions;
 use std::path::Path;
@@ -55,7 +56,7 @@ fn send_ack(
     ack: TeleportInitAck,
     stream: &mut TcpStream,
     enc: &Option<TeleportEnc>,
-) -> Result<(), Error> {
+) -> Result<(), TeleportError> {
     // Encode and send response
     utils::send_packet(stream, TeleportAction::InitAck, enc, ack.serialize()?)
 }
@@ -80,7 +81,7 @@ fn handle_connection(
     mut stream: TcpStream,
     recv_list: Arc<Mutex<Vec<String>>>,
     opt: Opt,
-) -> Result<(), Error> {
+) -> Result<(), TeleportError> {
     let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
 
@@ -237,8 +238,7 @@ fn handle_connection(
                 break;
             }
         };
-        let mut chunk = TeleportData::new();
-        chunk.deserialize(&packet.data)?;
+        let (_, mut chunk) = TeleportData::from_bytes((&packet.data, 0))?;
 
         if chunk.data_len == 0 {
             if received == header.filesize
