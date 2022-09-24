@@ -238,7 +238,7 @@ fn handle_connection(
                 break;
             }
         };
-        let (_, mut chunk) = TeleportData::from_bytes((&packet.data, 0))?;
+        let (_, chunk) = TeleportData::from_bytes((&packet.data, 0))?;
 
         if chunk.data_len == 0 {
             if received == header.filesize

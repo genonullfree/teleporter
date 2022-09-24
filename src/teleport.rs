@@ -3,7 +3,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use deku::prelude::*;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct TeleportHeader {
     protocol: u64,
     data_len: u32,
@@ -12,7 +12,7 @@ pub struct TeleportHeader {
     pub data: Vec<u8>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TeleportAction {
     Init = 0x01,
     InitAck = 0x02,
@@ -101,7 +101,7 @@ impl TeleportHeader {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TeleportEnc {
     secret: [u8; 32],
     remote: [u8; 32],
@@ -148,7 +148,7 @@ impl TeleportEnc {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInit {
     pub version: [u16; 3],
     pub features: u32,
@@ -158,7 +158,7 @@ pub struct TeleportInit {
     pub filename: Vec<char>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TeleportFeatures {
     NewFile = 0x01,
     Delta = 0x02,
@@ -246,7 +246,7 @@ impl TeleportInit {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInitAck {
     pub status: u8,
     pub version: [u16; 3],
@@ -254,7 +254,7 @@ pub struct TeleportInitAck {
     pub delta: Option<TeleportDelta>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TeleportStatus {
     Proceed,
     NoOverwrite,
@@ -373,7 +373,7 @@ impl TeleportInitAck {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportDelta {
     pub filesize: u64,
     pub hash: u64,

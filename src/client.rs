@@ -340,7 +340,7 @@ fn send_data_complete(
 ) -> Result<(), TeleportError> {
     let meta = file.metadata()?;
 
-    let mut chunk = TeleportData {
+    let chunk = TeleportData {
         offset: meta.len() as u64,
         data_len: 0,
         data: Vec::<u8>::new(),
@@ -409,7 +409,7 @@ fn send(
         }
 
         let data = &buf[..len];
-        let mut chunk = TeleportData {
+        let chunk = TeleportData {
             offset: sent as u64,
             data_len: len as u32,
             data: data.to_vec(),
