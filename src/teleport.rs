@@ -148,14 +148,16 @@ impl TeleportEnc {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, DekuRead, DekuWrite, PartialEq, Eq)]
+#[deku(endian = "little")]
 pub struct TeleportInit {
     pub version: [u16; 3],
     pub features: u32,
     pub chmod: u32,
     pub filesize: u64,
     pub filename_len: u16,
-    pub filename: Vec<char>,
+    #[deku(count = "filename_len")]
+    pub filename: Vec<u8>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -181,68 +183,8 @@ impl TeleportInit {
             chmod: 0o644,
             filesize: 0,
             filename_len: 0,
-            filename: Vec::<char>::new(),
+            filename: Vec::<u8>::new(),
         }
-    }
-
-    pub fn serialize(&self) -> Result<Vec<u8>, Error> {
-        let mut out = Vec::<u8>::new();
-
-        // Add version
-        for i in self.version {
-            out.append(&mut i.to_le_bytes().to_vec());
-        }
-
-        // Add features
-        out.append(&mut (self.features as u32).to_le_bytes().to_vec());
-
-        // Add chmod
-        out.append(&mut self.chmod.to_le_bytes().to_vec());
-
-        // Add filesize
-        out.append(&mut self.filesize.to_le_bytes().to_vec());
-
-        // Add filename_len
-        let flen = u16::try_from(self.filename.len()).unwrap();
-        out.append(&mut flen.to_le_bytes().to_vec());
-
-        // Add filename
-        out.append(&mut self.filename.iter().map(|x| *x as u8).collect());
-
-        Ok(out)
-    }
-
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
-        let mut buf: &[u8] = input;
-
-        // Extract version info
-        for i in &mut self.version {
-            *i = buf.read_u16::<LittleEndian>().unwrap();
-        }
-
-        // Extract file command feature requests
-        self.features = buf.read_u32::<LittleEndian>().unwrap();
-
-        // Extract file chmod permissions
-        self.chmod = buf.read_u32::<LittleEndian>().unwrap();
-
-        // Extract file size
-        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
-
-        // Extract filename_len
-        self.filename_len = buf.read_u16::<LittleEndian>().unwrap();
-
-        // Extract filename
-        let fname = &buf[..self.filename_len as usize].to_vec();
-        self.filename = fname.iter().map(|x| *x as char).collect();
-        if self.filename.len() != self.filename_len as usize {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Filename incorrect length",
-            ));
-        }
-
-        Ok(())
     }
 }
 
@@ -263,6 +205,7 @@ pub enum TeleportStatus {
     WrongVersion,
     RequiresEncryption,
     EncryptionError,
+    BadFileName,
     UnknownAction,
 }
 
@@ -505,12 +448,13 @@ mod tests {
     fn test_teleportinit_serialize() {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
         test.version = [0, 5, 5];
-        test.filename = vec!['f', 'i', 'l', 'e'];
+        test.filename = vec![b'f', b'i', b'l', b'e'];
+        test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
         test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
-        let out = test.serialize().unwrap();
+        let out = test.to_bytes().unwrap();
         assert_eq!(out, TESTINIT);
     }
 
@@ -518,14 +462,13 @@ mod tests {
     fn test_teleportinit_deserialize() {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
         test.version = [0, 5, 5];
-        test.filename = vec!['f', 'i', 'l', 'e'];
+        test.filename = vec![b'f', b'i', b'l', b'e'];
         test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
         test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
-        let mut t = TeleportInit::new(TeleportFeatures::NewFile);
-        t.deserialize(TESTINIT).unwrap();
+        let (_, mut t) = TeleportInit::from_bytes((&TESTINIT, 0)).unwrap();
         t.version = [0, 5, 5];
 
         assert_eq!(test, t);

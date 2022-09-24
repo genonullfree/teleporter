@@ -209,7 +209,8 @@ pub fn run(mut opt: Opt) -> Result<(), TeleportError> {
         header.features = features;
         header.chmod = meta.permissions().mode();
         header.filesize = meta.len();
-        header.filename = filename.chars().collect();
+        header.filename = filename.as_bytes().to_vec();
+        header.filename_len = header.filename.len() as u16;
 
         // Connect to server
         let addr = format!("{}:{}", opt.dest, opt.port);
@@ -243,7 +244,7 @@ pub fn run(mut opt: Opt) -> Result<(), TeleportError> {
         }
 
         // Send header first
-        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.serialize()?)?;
+        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.to_bytes()?)?;
 
         // Receive response from server
         let packet = utils::recv_packet(&mut stream, &enc)?;
