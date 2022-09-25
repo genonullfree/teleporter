@@ -14,10 +14,10 @@ use std::time::Instant;
 use clap::Parser;
 use semver::Version;
 
-mod listen;
-mod send;
 mod crypto;
 mod errors;
+mod listen;
+mod send;
 mod teleport;
 mod utils;
 use errors::TeleportError;

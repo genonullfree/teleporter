@@ -155,6 +155,7 @@ pub struct TeleportInit {
     pub features: u32,
     pub chmod: u32,
     pub filesize: u64,
+    #[deku(update = "self.filename.len()")]
     pub filename_len: u16,
     #[deku(count = "filename_len")]
     pub filename: Vec<u8>,
@@ -188,11 +189,15 @@ impl TeleportInit {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, DekuRead, DekuWrite, PartialEq, Eq)]
 pub struct TeleportInitAck {
     pub status: u8,
     pub version: [u16; 3],
+    #[deku(cond = "*status == TeleportStatus::Proceed as u8")]
     pub features: Option<u32>,
+    #[deku(
+        cond = "(*features).map_or(false, |x| x  & TeleportFeatures::Delta as u32 == TeleportFeatures::Delta as u32)"
+    )]
     pub delta: Option<TeleportDelta>,
 }
 
@@ -247,72 +252,6 @@ impl TeleportInitAck {
             delta: None,
         }
     }
-
-    pub fn serialize(self) -> Result<Vec<u8>, TeleportError> {
-        let mut out = Vec::<u8>::new();
-
-        // Add status
-        let status = self.status as u8;
-        out.append(&mut vec![status]);
-
-        // Add version
-        for i in self.version {
-            out.append(&mut i.to_le_bytes().to_vec());
-        }
-
-        // If no features, return early
-        if status != TeleportStatus::Proceed as u8 || self.features.is_none() {
-            return Ok(out);
-        }
-
-        // Add optional features
-        let feat = self.features.unwrap() as u32;
-        out.append(&mut feat.to_le_bytes().to_vec());
-
-        // If no delta, return early
-        if feat & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32
-            || self.delta.is_none()
-        {
-            return Ok(out);
-        }
-
-        // Add optional TeleportDelta data
-        out.append(&mut self.delta.unwrap().to_bytes()?);
-
-        Ok(out)
-    }
-
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
-        let mut buf: &[u8] = input;
-
-        // Extract status
-        self.status = buf.read_u8().unwrap();
-
-        // Extract version
-        for i in &mut self.version {
-            *i = buf.read_u16::<LittleEndian>().unwrap();
-        }
-
-        // If no features, return early
-        if self.status != TeleportStatus::Proceed as u8 {
-            return Ok(());
-        }
-
-        // Extract optional features
-        let features = buf.read_u32::<LittleEndian>().unwrap();
-        self.features = Some(features);
-
-        // If no delta, return early
-        if features & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32 {
-            return Ok(());
-        }
-
-        // Extract optional TeleportDelta data
-        let (_, delta) = TeleportDelta::from_bytes((&input[11..], 0))?;
-        self.delta = Some(delta);
-
-        Ok(())
-    }
 }
 
 #[derive(Clone, Debug, Default, DekuRead, DekuWrite, PartialEq, Eq)]
@@ -321,6 +260,7 @@ pub struct TeleportDelta {
     pub filesize: u64,
     pub hash: u64,
     pub chunk_size: u32,
+    #[deku(update = "self.chunk_hash.len()")]
     chunk_hash_len: u16,
     #[deku(count = "chunk_hash_len")]
     pub chunk_hash: Vec<u64>,
@@ -342,6 +282,7 @@ impl TeleportDelta {
 #[deku(endian = "little")]
 pub struct TeleportData {
     pub offset: u64,
+    #[deku(update = "self.data.len()")]
     pub data_len: u32,
     #[deku(count = "data_len")]
     pub data: Vec<u8>,
@@ -530,7 +471,7 @@ mod tests {
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
         test.version = [0, 6, 0];
-        let out = test.serialize().unwrap();
+        let out = test.to_bytes().unwrap();
 
         assert_eq!(out, TESTINITACK);
     }
@@ -542,8 +483,7 @@ mod tests {
         test.features = Some(feat);
         test.version = [0, 6, 0];
 
-        let mut t = TeleportInitAck::new(TeleportStatus::Proceed);
-        t.deserialize(TESTINITACK).unwrap();
+        let (_, t) = TeleportInitAck::from_bytes((&TESTINITACK, 0)).unwrap();
 
         assert_eq!(test, t);
     }

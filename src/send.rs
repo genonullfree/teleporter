@@ -3,7 +3,7 @@ use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportData, TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
-use deku::DekuContainerWrite;
+use deku::{DekuContainerRead, DekuContainerWrite};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -248,8 +248,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
 
         // Receive response from server
         let packet = utils::recv_packet(&mut stream, &enc)?;
-        let mut recv = TeleportInitAck::new(TeleportStatus::UnknownAction);
-        recv.deserialize(&packet.data)?;
+        let (_, recv) = TeleportInitAck::from_bytes((&packet.data, 0))?;
 
         if num == 0 {
             println!(

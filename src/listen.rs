@@ -2,7 +2,7 @@ use crate::teleport::*;
 use crate::teleport::{TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::*;
-use deku::DekuContainerRead;
+use deku::{DekuContainerRead, DekuContainerWrite};
 use std::fs;
 use std::fs::OpenOptions;
 use std::path::Path;
@@ -58,7 +58,7 @@ fn send_ack(
     enc: &Option<TeleportEnc>,
 ) -> Result<(), TeleportError> {
     // Encode and send response
-    utils::send_packet(stream, TeleportAction::InitAck, enc, ack.serialize()?)
+    utils::send_packet(stream, TeleportAction::InitAck, enc, ack.to_bytes()?)
 }
 
 fn print_list(list: &MutexGuard<Vec<String>>) {
