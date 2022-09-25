@@ -14,10 +14,10 @@ use std::time::Instant;
 use clap::Parser;
 use semver::Version;
 
-mod client;
+mod listen;
+mod send;
 mod crypto;
 mod errors;
-mod server;
 mod teleport;
 mod utils;
 use errors::TeleportError;
@@ -105,9 +105,9 @@ fn main() {
 
     // If the input filepath list is empty, assume we're in server mode
     let out = match opt.cmd {
-        Cmd::Listen(l) => server::run(l),
+        Cmd::Listen(l) => listen::run(l),
         // Else, we have files to send so we're in client mode
-        Cmd::Send(s) => client::run(s),
+        Cmd::Send(s) => send::run(s),
     };
 
     match out {
