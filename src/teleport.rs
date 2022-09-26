@@ -260,7 +260,8 @@ mod tests {
         t.data.append(&mut TESTDATA.to_vec());
         t.action |= TeleportAction::Encrypted as u8;
         t.iv = Some(*TESTHEADERIV);
-        let s = t.serialize().unwrap();
+        t.data_len = 17;
+        let s = t.to_bytes().unwrap();
         assert_eq!(s, TESTHEADER);
     }
 
@@ -271,8 +272,7 @@ mod tests {
         test.action |= TeleportAction::Encrypted as u8;
         test.iv = Some(*TESTHEADERIV);
         test.data_len = 17;
-        let mut t = TeleportHeader::new(TeleportAction::Init);
-        t.deserialize(TESTHEADER.to_vec()).unwrap();
+        let (_, t) = TeleportHeader::from_bytes((&TESTHEADER, 0)).unwrap();
         assert_eq!(t, test);
     }
 
