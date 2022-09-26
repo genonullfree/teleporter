@@ -28,7 +28,6 @@ use errors::TeleportError;
 pub enum Cmd {
     Listen(ListenOpt),
     Send(SendOpt),
-    //Command,
 }
 
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
@@ -48,7 +47,7 @@ pub struct SendOpt {
     #[clap(short, long, default_value = "127.0.0.1")]
     dest: String,
 
-    /// Destination teleporter Port, or Port to listen on
+    /// Destination teleporter Port
     #[clap(short, long, default_value = "9001")]
     port: u16,
 
@@ -91,7 +90,7 @@ pub struct ListenOpt {
     #[clap(short, long)]
     must_encrypt: bool,
 
-    /// Destination teleporter Port, or Port to listen on
+    /// Port to listen on
     #[clap(short, long, default_value = "9001")]
     port: u16,
 }
@@ -103,13 +102,13 @@ fn main() {
     // Process arguments
     let opt = Opt::parse();
 
-    // If the input filepath list is empty, assume we're in server mode
+    // Execute command
     let out = match opt.cmd {
         Cmd::Listen(l) => listen::run(l),
-        // Else, we have files to send so we're in client mode
         Cmd::Send(s) => send::run(s),
     };
 
+    // Display any errors
     match out {
         Ok(()) => {}
         Err(s) => println!("Error: {}", s),

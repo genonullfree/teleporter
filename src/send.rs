@@ -309,7 +309,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
             && file_delta.as_ref().unwrap().hash == csum_recv.unwrap()
         {
             // File matches hash
-            send_data_complete(stream, &enc, file)?;
+            send_data_complete(stream, &enc, header.filesize)?;
             skip += 1;
         } else {
             // Send file data
@@ -336,12 +336,10 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
 fn send_data_complete(
     mut stream: TcpStream,
     enc: &Option<TeleportEnc>,
-    file: File,
+    filesize: u64,
 ) -> Result<(), TeleportError> {
-    let meta = file.metadata()?;
-
     let chunk = TeleportData {
-        offset: meta.len() as u64,
+        offset: filesize,
         data_len: 0,
         data: Vec::<u8>::new(),
     };
@@ -362,6 +360,8 @@ fn send(
     file_delta: Option<TeleportDelta>,
 ) -> Result<(), TeleportError> {
     let mut buf = Vec::<u8>::new();
+    let meta = file.metadata()?;
+
     // Set transfer chunk size to delta chunk size, or default to 4096
     match delta {
         Some(ref d) => buf.resize(d.chunk_size as usize, 0),
@@ -422,7 +422,7 @@ fn send(
         print_updates(sent as f64, header);
     }
 
-    send_data_complete(stream, enc, file)?;
+    send_data_complete(stream, enc, meta.len())?;
 
     Ok(())
 }

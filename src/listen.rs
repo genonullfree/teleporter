@@ -157,14 +157,14 @@ fn handle_connection(
     let path = match Path::new(&filename).parent() {
         Some(p) => p,
         None => {
-            println!("Error: unable to create directories: {:?}", &filename);
+            println!("Error: unable to parse the path and filename: {:?}", &filename);
             let resp = TeleportInitAck::new(TeleportStatus::BadFileName);
             return send_ack(resp, &mut stream, &enc);
         }
     };
 
     if fs::create_dir_all(path).is_err() {
-        println!("Error: unable to create directories: {:?}", &filename);
+        println!("Error: unable to create directories: {:?}", &path);
         let resp = TeleportInitAck::new(TeleportStatus::NoPermission);
         return send_ack(resp, &mut stream, &enc);
     };
