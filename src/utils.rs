@@ -2,6 +2,7 @@ use crate::teleport::TeleportInit;
 use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportHeader};
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
+use deku::{DekuContainerRead, DekuContainerWrite};
 use rand::prelude::*;
 use std::hash::Hasher;
 use xxhash_rust::xxh3;
@@ -86,8 +87,10 @@ pub fn send_packet(
         header.data = data;
     }
 
+    header.data_len = header.data.len() as u32;
+
     // Serialize the message
-    let message = header.serialize()?;
+    let message = header.to_bytes()?;
 
     // Send the packet
     sock.write_all(&message)?;
@@ -99,7 +102,7 @@ pub fn send_packet(
 pub fn recv_packet(
     sock: &mut TcpStream,
     dec: &Option<TeleportEnc>,
-) -> Result<TeleportHeader, Error> {
+) -> Result<TeleportHeader, TeleportError> {
     let mut initbuf: [u8; 13] = [0; 13];
     loop {
         let len = sock.peek(&mut initbuf)?;
@@ -111,7 +114,7 @@ pub fn recv_packet(
     let mut init: &[u8] = &initbuf;
     let protocol = init.read_u64::<LittleEndian>().unwrap();
     if protocol != PROTOCOL {
-        return Err(Error::new(ErrorKind::InvalidData, "Invalid protocol"));
+        return Err(TeleportError::InvalidProtocol);
     }
 
     let packet_len = init.read_u32::<LittleEndian>().unwrap();
@@ -129,8 +132,7 @@ pub fn recv_packet(
 
     sock.read_exact(&mut buf)?;
 
-    let mut out = TeleportHeader::new(TeleportAction::Init);
-    out.deserialize(buf)?;
+    let (_, mut out) = TeleportHeader::from_bytes((&buf, 0))?;
 
     if encrypted {
         out.action ^= TeleportAction::Encrypted as u8;

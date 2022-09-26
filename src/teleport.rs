@@ -1,14 +1,16 @@
 use crate::*;
-use byteorder::{LittleEndian, ReadBytesExt};
 use deku::prelude::*;
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, DekuWrite, DekuRead, Eq)]
 pub struct TeleportHeader {
     protocol: u64,
-    data_len: u32,
+    #[deku(update = "self.data.len()")]
+    pub data_len: u32,
     pub action: u8,
+    #[deku(cond = "*action & TeleportAction::Encrypted as u8 == TeleportAction::Encrypted as u8")]
     pub iv: Option<[u8; 12]>,
+    #[deku(count = "data_len")]
     pub data: Vec<u8>,
 }
 
@@ -31,73 +33,6 @@ impl TeleportHeader {
             iv: None,
             data: Vec::<u8>::new(),
         }
-    }
-
-    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
-        let mut out = Vec::<u8>::new();
-
-        // Add Protocol identifier
-        out.append(&mut self.protocol.to_le_bytes().to_vec());
-
-        // Add data length
-        self.data_len = u32::try_from(self.data.len()).unwrap();
-        out.append(&mut self.data_len.to_le_bytes().to_vec());
-
-        // Add action code
-        let mut action = self.action as u8;
-        if self.iv.is_some() {
-            action |= TeleportAction::Encrypted as u8;
-        }
-        out.push(action);
-
-        // If Encrypted, add IV
-        if let Some(iv) = self.iv {
-            out.append(&mut iv[..].to_vec());
-        };
-
-        // Add data
-        out.append(&mut self.data.clone());
-
-        Ok(out)
-    }
-
-    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
-        let mut buf: &[u8] = &input;
-
-        // Extract Protocol
-        self.protocol = buf.read_u64::<LittleEndian>().unwrap();
-        if self.protocol != PROTOCOL {
-            return Err(Error::new(ErrorKind::InvalidData, "Error reading protocol"));
-        }
-
-        // Extract data length
-        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
-        let mut data_ofs = 13;
-
-        // Extract action code
-        let action = buf.read_u8().unwrap();
-        self.action = action;
-
-        // If Encrypted, extract IV
-        if (action & TeleportAction::Encrypted as u8) == TeleportAction::Encrypted as u8 {
-            if input.len() < 25 {
-                return Err(Error::new(ErrorKind::InvalidData, "Not enough data for IV"));
-            }
-            let iv: [u8; 12] = input[13..25].try_into().expect("Error reading IV");
-            self.iv = Some(iv);
-            data_ofs += 12;
-        }
-
-        // Extract data
-        self.data = input[data_ofs..].to_vec();
-        if self.data.len() != self.data_len as usize {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Data is not the expected length",
-            ));
-        }
-
-        Ok(())
     }
 }
 
