@@ -157,7 +157,10 @@ fn handle_connection(
     let path = match Path::new(&filename).parent() {
         Some(p) => p,
         None => {
-            println!("Error: unable to parse the path and filename: {:?}", &filename);
+            println!(
+                "Error: unable to parse the path and filename: {:?}",
+                &filename
+            );
             let resp = TeleportInitAck::new(TeleportStatus::BadFileName);
             return send_ack(resp, &mut stream, &enc);
         }
