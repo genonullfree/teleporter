@@ -2,7 +2,6 @@ use crate::teleport::TeleportInit;
 use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportHeader};
 use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
-use deku::{DekuContainerRead, DekuContainerWrite};
 use rand::prelude::*;
 use std::hash::Hasher;
 use xxhash_rust::xxh3;
@@ -87,10 +86,8 @@ pub fn send_packet(
         header.data = data;
     }
 
-    header.data_len = header.data.len() as u32;
-
     // Serialize the message
-    let message = header.to_bytes()?;
+    let message = header.serialize()?;
 
     // Send the packet
     sock.write_all(&message)?;
@@ -132,7 +129,8 @@ pub fn recv_packet(
 
     sock.read_exact(&mut buf)?;
 
-    let (_, mut out) = TeleportHeader::from_bytes((&buf, 0))?;
+    let mut out = TeleportHeader::new(TeleportAction::Init);
+    out.deserialize(buf)?;
 
     if encrypted {
         out.action ^= TeleportAction::Encrypted as u8;

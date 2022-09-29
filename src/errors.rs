@@ -27,4 +27,7 @@ pub enum TeleportError {
 
     #[error("Invalid Protocol header received")]
     InvalidProtocol,
+
+    #[error("Invalid file name")]
+    InvalidFileName,
 }

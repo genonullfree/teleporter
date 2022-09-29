@@ -1,20 +1,17 @@
 use crate::*;
-use deku::prelude::*;
+use byteorder::{LittleEndian, ReadBytesExt};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-#[derive(Debug, PartialEq, DekuWrite, DekuRead, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct TeleportHeader {
     protocol: u64,
-    #[deku(update = "self.data.len()")]
-    pub data_len: u32,
+    data_len: u32,
     pub action: u8,
-    #[deku(cond = "*action & TeleportAction::Encrypted as u8 == TeleportAction::Encrypted as u8")]
     pub iv: Option<[u8; 12]>,
-    #[deku(count = "data_len")]
     pub data: Vec<u8>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TeleportAction {
     Init = 0x01,
     InitAck = 0x02,
@@ -34,9 +31,76 @@ impl TeleportHeader {
             data: Vec::<u8>::new(),
         }
     }
+
+    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
+        let mut out = Vec::<u8>::new();
+
+        // Add Protocol identifier
+        out.append(&mut self.protocol.to_le_bytes().to_vec());
+
+        // Add data length
+        self.data_len = u32::try_from(self.data.len()).unwrap();
+        out.append(&mut self.data_len.to_le_bytes().to_vec());
+
+        // Add action code
+        let mut action = self.action as u8;
+        if self.iv.is_some() {
+            action |= TeleportAction::Encrypted as u8;
+        }
+        out.push(action);
+
+        // If Encrypted, add IV
+        if let Some(iv) = self.iv {
+            out.append(&mut iv[..].to_vec());
+        };
+
+        // Add data
+        out.append(&mut self.data.clone());
+
+        Ok(out)
+    }
+
+    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
+        let mut buf: &[u8] = &input;
+
+        // Extract Protocol
+        self.protocol = buf.read_u64::<LittleEndian>().unwrap();
+        if self.protocol != PROTOCOL {
+            return Err(Error::new(ErrorKind::InvalidData, "Error reading protocol"));
+        }
+
+        // Extract data length
+        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
+        let mut data_ofs = 13;
+
+        // Extract action code
+        let action = buf.read_u8().unwrap();
+        self.action = action;
+
+        // If Encrypted, extract IV
+        if (action & TeleportAction::Encrypted as u8) == TeleportAction::Encrypted as u8 {
+            if input.len() < 25 {
+                return Err(Error::new(ErrorKind::InvalidData, "Not enough data for IV"));
+            }
+            let iv: [u8; 12] = input[13..25].try_into().expect("Error reading IV");
+            self.iv = Some(iv);
+            data_ofs += 12;
+        }
+
+        // Extract data
+        self.data = input[data_ofs..].to_vec();
+        if self.data.len() != self.data_len as usize {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Data is not the expected length",
+            ));
+        }
+
+        Ok(())
+    }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TeleportEnc {
     secret: [u8; 32],
     remote: [u8; 32],
@@ -83,20 +147,17 @@ impl TeleportEnc {
     }
 }
 
-#[derive(Clone, Debug, Default, DekuRead, DekuWrite, PartialEq, Eq)]
-#[deku(endian = "little")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TeleportInit {
     pub version: [u16; 3],
     pub features: u32,
     pub chmod: u32,
     pub filesize: u64,
-    #[deku(update = "self.filename.len()")]
     pub filename_len: u16,
-    #[deku(count = "filename_len")]
     pub filename: Vec<u8>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum TeleportFeatures {
     NewFile = 0x01,
     Delta = 0x02,
@@ -122,21 +183,74 @@ impl TeleportInit {
             filename: Vec::<u8>::new(),
         }
     }
+
+    pub fn serialize(&self) -> Result<Vec<u8>, Error> {
+        let mut out = Vec::<u8>::new();
+
+        // Add version
+        for i in self.version {
+            out.append(&mut i.to_le_bytes().to_vec());
+        }
+
+        // Add features
+        out.append(&mut (self.features as u32).to_le_bytes().to_vec());
+
+        // Add chmod
+        out.append(&mut self.chmod.to_le_bytes().to_vec());
+
+        // Add filesize
+        out.append(&mut self.filesize.to_le_bytes().to_vec());
+
+        // Add filename_len
+        let flen = u16::try_from(self.filename.len()).unwrap();
+        out.append(&mut flen.to_le_bytes().to_vec());
+
+        // Add filename
+        out.append(&mut self.filename.iter().map(|x| *x as u8).collect());
+
+        Ok(out)
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
+        let mut buf: &[u8] = input;
+
+        // Extract version info
+        for i in &mut self.version {
+            *i = buf.read_u16::<LittleEndian>().unwrap();
+        }
+
+        // Extract file command feature requests
+        self.features = buf.read_u32::<LittleEndian>().unwrap();
+
+        // Extract file chmod permissions
+        self.chmod = buf.read_u32::<LittleEndian>().unwrap();
+
+        // Extract file size
+        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
+
+        // Extract filename_len
+        self.filename_len = buf.read_u16::<LittleEndian>().unwrap();
+
+        // Extract filename
+        let fname = &buf[..self.filename_len as usize].to_vec();
+        self.filename = fname.to_vec();
+        if self.filename.len() != self.filename_len as usize {
+            return Err(TeleportError::InvalidFileName);
+        }
+
+        Ok(())
+    }
 }
 
-#[derive(Clone, Debug, DekuRead, DekuWrite, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TeleportInitAck {
     pub status: u8,
     pub version: [u16; 3],
-    #[deku(cond = "*status == TeleportStatus::Proceed as u8")]
     pub features: Option<u32>,
-    #[deku(
-        cond = "(*features).map_or(false, |x| x  & TeleportFeatures::Delta as u32 == TeleportFeatures::Delta as u32)"
-    )]
     pub delta: Option<TeleportDelta>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TeleportStatus {
     Proceed,
     NoOverwrite,
@@ -187,17 +301,81 @@ impl TeleportInitAck {
             delta: None,
         }
     }
+
+    pub fn serialize(self) -> Result<Vec<u8>, Error> {
+        let mut out = Vec::<u8>::new();
+
+        // Add status
+        let status = self.status as u8;
+        out.append(&mut vec![status]);
+
+        // Add version
+        for i in self.version {
+            out.append(&mut i.to_le_bytes().to_vec());
+        }
+
+        // If no features, return early
+        if status != TeleportStatus::Proceed as u8 || self.features.is_none() {
+            return Ok(out);
+        }
+
+        // Add optional features
+        let feat = self.features.unwrap() as u32;
+        out.append(&mut feat.to_le_bytes().to_vec());
+
+        // If no delta, return early
+        if feat & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32
+            || self.delta.is_none()
+        {
+            return Ok(out);
+        }
+
+        // Add optional TeleportDelta data
+        out.append(&mut self.delta.unwrap().serialize()?);
+
+        Ok(out)
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        let mut buf: &[u8] = input;
+
+        // Extract status
+        self.status = buf.read_u8().unwrap();
+
+        // Extract version
+        for i in &mut self.version {
+            *i = buf.read_u16::<LittleEndian>().unwrap();
+        }
+
+        // If no features, return early
+        if self.status != TeleportStatus::Proceed as u8 {
+            return Ok(());
+        }
+
+        // Extract optional features
+        let features = buf.read_u32::<LittleEndian>().unwrap();
+        self.features = Some(features);
+
+        // If no delta, return early
+        if features & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32 {
+            return Ok(());
+        }
+
+        // Extract optional TeleportDelta data
+        let mut delta = TeleportDelta::new();
+        delta.deserialize(&input[11..])?;
+        self.delta = Some(delta);
+
+        Ok(())
+    }
 }
 
-#[derive(Clone, Debug, Default, DekuRead, DekuWrite, PartialEq, Eq)]
-#[deku(endian = "little")]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TeleportDelta {
     pub filesize: u64,
     pub hash: u64,
     pub chunk_size: u32,
-    #[deku(update = "self.chunk_hash.len()")]
     chunk_hash_len: u16,
-    #[deku(count = "chunk_hash_len")]
     pub chunk_hash: Vec<u64>,
 }
 
@@ -211,15 +389,91 @@ impl TeleportDelta {
             chunk_hash: Vec::<u64>::new(),
         }
     }
+
+    fn delta_serial(input: &[u64]) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+
+        for i in input {
+            out.append(&mut i.to_le_bytes().to_vec());
+        }
+
+        out
+    }
+
+    pub fn serialize(self) -> Result<Vec<u8>, Error> {
+        let mut out = Vec::<u8>::new();
+
+        // Add file size
+        out.append(&mut self.filesize.to_le_bytes().to_vec());
+
+        // Add file hash
+        out.append(&mut self.hash.to_le_bytes().to_vec());
+
+        // Add chunk size
+        out.append(&mut self.chunk_size.to_le_bytes().to_vec());
+
+        // Add delta vector length
+        let dlen = u16::try_from(self.chunk_hash.len()).unwrap();
+        out.append(&mut dlen.to_le_bytes().to_vec());
+
+        // Add delta vector
+        out.append(&mut TeleportDelta::delta_serial(&self.chunk_hash));
+
+        Ok(out)
+    }
+
+    fn delta_deserial(input: &[u8], len: u16) -> Result<Vec<u64>, Error> {
+        if input.len() % 8 != 0 || len as usize != input.len() / 8 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Cannot deserialize Vec<u64>",
+            ));
+        }
+
+        let mut out = Vec::<u64>::new();
+        let mut buf = input;
+        let mut count: u16 = len;
+        while count > 0 {
+            let a: u64 = buf.read_u64::<LittleEndian>().unwrap();
+            out.push(a);
+            count -= 1;
+        }
+
+        Ok(out)
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        let mut buf: &[u8] = input;
+
+        if input.len() < 22 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Not enough data for Delta deserialize",
+            ));
+        }
+
+        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
+
+        // Extract file hash
+        self.hash = buf.read_u64::<LittleEndian>().unwrap();
+
+        // Extract chunk size
+        self.chunk_size = buf.read_u32::<LittleEndian>().unwrap();
+
+        // Extract delta vector length
+        self.chunk_hash_len = buf.read_u16::<LittleEndian>().unwrap();
+
+        // Extract delta vector
+        self.chunk_hash = TeleportDelta::delta_deserial(buf, self.chunk_hash_len).unwrap();
+
+        Ok(())
+    }
 }
 
-#[derive(Debug, Default, DekuRead, DekuWrite, PartialEq, Eq)]
-#[deku(endian = "little")]
+#[derive(Debug, PartialEq)]
 pub struct TeleportData {
     pub offset: u64,
-    #[deku(update = "self.data.len()")]
     pub data_len: u32,
-    #[deku(count = "data_len")]
     pub data: Vec<u8>,
 }
 
@@ -230,6 +484,43 @@ impl TeleportData {
             data_len: 0,
             data: Vec::<u8>::new(),
         }
+    }
+
+    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
+        let mut out = Vec::<u8>::new();
+
+        // Add offset
+        out.append(&mut self.offset.to_le_bytes().to_vec());
+
+        // Add data length
+        let length = u32::try_from(self.data.len()).unwrap();
+        out.append(&mut length.to_le_bytes().to_vec());
+
+        // Add data
+        out.append(&mut self.data);
+
+        Ok(out)
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+        let mut buf: &[u8] = input;
+
+        // Extract offset
+        self.offset = buf.read_u64::<LittleEndian>().unwrap();
+
+        // Extract data length
+        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
+
+        // Extract data
+        self.data = input[12..].to_vec();
+        if self.data.len() != self.data_len as usize {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "Filename incorrect length",
+            ));
+        }
+
+        Ok(())
     }
 }
 
@@ -260,8 +551,7 @@ mod tests {
         t.data.append(&mut TESTDATA.to_vec());
         t.action |= TeleportAction::Encrypted as u8;
         t.iv = Some(*TESTHEADERIV);
-        t.data_len = 17;
-        let s = t.to_bytes().unwrap();
+        let s = t.serialize().unwrap();
         assert_eq!(s, TESTHEADER);
     }
 
@@ -272,7 +562,8 @@ mod tests {
         test.action |= TeleportAction::Encrypted as u8;
         test.iv = Some(*TESTHEADERIV);
         test.data_len = 17;
-        let (_, t) = TeleportHeader::from_bytes((&TESTHEADER, 0)).unwrap();
+        let mut t = TeleportHeader::new(TeleportAction::Init);
+        t.deserialize(TESTHEADER.to_vec()).unwrap();
         assert_eq!(t, test);
     }
 
@@ -325,12 +616,11 @@ mod tests {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
         test.version = [0, 5, 5];
         test.filename = vec![b'f', b'i', b'l', b'e'];
-        test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
         test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
-        let out = test.to_bytes().unwrap();
+        let out = test.serialize().unwrap();
         assert_eq!(out, TESTINIT);
     }
 
@@ -344,7 +634,8 @@ mod tests {
         test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
-        let (_, mut t) = TeleportInit::from_bytes((&TESTINIT, 0)).unwrap();
+        let mut t = TeleportInit::new(TeleportFeatures::NewFile);
+        t.deserialize(TESTINIT).unwrap();
         t.version = [0, 5, 5];
 
         assert_eq!(test, t);
@@ -358,7 +649,7 @@ mod tests {
         test.chunk_size = 123456789;
         test.chunk_hash = Vec::<u64>::new();
 
-        let out = test.to_bytes().unwrap();
+        let out = test.serialize().unwrap();
 
         assert_eq!(out, TESTDELTA);
     }
@@ -371,7 +662,8 @@ mod tests {
         test.chunk_size = 123456789;
         test.chunk_hash = Vec::<u64>::new();
 
-        let (_, t) = TeleportDelta::from_bytes((&TESTDELTA, 0)).unwrap();
+        let mut t = TeleportDelta::new();
+        t.deserialize(TESTDELTA).unwrap();
 
         assert_eq!(test, t);
     }
@@ -383,7 +675,7 @@ mod tests {
         test.data_len = 5;
         test.data = vec![1, 2, 3, 4, 5];
 
-        let out = test.to_bytes().unwrap();
+        let out = test.serialize().unwrap();
 
         assert_eq!(out, TESTDATAPKT);
     }
@@ -395,7 +687,8 @@ mod tests {
         test.data_len = 5;
         test.data = vec![1, 2, 3, 4, 5];
 
-        let (_, t) = TeleportData::from_bytes((&TESTDATAPKT, 0)).unwrap();
+        let mut t = TeleportData::new();
+        t.deserialize(TESTDATAPKT).unwrap();
 
         assert_eq!(test, t);
     }
@@ -406,7 +699,7 @@ mod tests {
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
         test.version = [0, 6, 0];
-        let out = test.to_bytes().unwrap();
+        let out = test.serialize().unwrap();
 
         assert_eq!(out, TESTINITACK);
     }
@@ -418,7 +711,8 @@ mod tests {
         test.features = Some(feat);
         test.version = [0, 6, 0];
 
-        let (_, t) = TeleportInitAck::from_bytes((&TESTINITACK, 0)).unwrap();
+        let mut t = TeleportInitAck::new(TeleportStatus::Proceed);
+        t.deserialize(TESTINITACK).unwrap();
 
         assert_eq!(test, t);
     }

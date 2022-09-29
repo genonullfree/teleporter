@@ -3,7 +3,6 @@ use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportData, TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
-use deku::{DekuContainerRead, DekuContainerWrite};
 use std::path::Path;
 
 #[derive(Debug)]
@@ -210,7 +209,6 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         header.chmod = meta.permissions().mode();
         header.filesize = meta.len();
         header.filename = filename.as_bytes().to_vec();
-        header.filename_len = header.filename.len() as u16;
 
         // Connect to server
         let addr = format!("{}:{}", opt.dest, opt.port);
@@ -244,11 +242,12 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         }
 
         // Send header first
-        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.to_bytes()?)?;
+        utils::send_packet(&mut stream, TeleportAction::Init, &enc, header.serialize()?)?;
 
         // Receive response from server
         let packet = utils::recv_packet(&mut stream, &enc)?;
-        let (_, recv) = TeleportInitAck::from_bytes((&packet.data, 0))?;
+        let mut recv = TeleportInitAck::new(TeleportStatus::Proceed);
+        recv.deserialize(&packet.data)?;
 
         if num == 0 {
             println!(
@@ -338,14 +337,14 @@ fn send_data_complete(
     enc: &Option<TeleportEnc>,
     filesize: u64,
 ) -> Result<(), TeleportError> {
-    let chunk = TeleportData {
+    let mut chunk = TeleportData {
         offset: filesize,
         data_len: 0,
         data: Vec::<u8>::new(),
     };
 
     // Send the data chunk
-    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.to_bytes()?)?;
+    utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize()?)?;
 
     Ok(())
 }
@@ -409,14 +408,14 @@ fn send(
         }
 
         let data = &buf[..len];
-        let chunk = TeleportData {
+        let mut chunk = TeleportData {
             offset: sent as u64,
             data_len: len as u32,
             data: data.to_vec(),
         };
 
         // Send the data chunk
-        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.to_bytes()?)?;
+        utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize()?)?;
 
         sent += len;
         print_updates(sent as f64, header);

@@ -2,7 +2,6 @@ use crate::teleport::*;
 use crate::teleport::{TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportInit, TeleportInitAck};
 use crate::*;
-use deku::{DekuContainerRead, DekuContainerWrite};
 use std::fs;
 use std::fs::OpenOptions;
 use std::path::Path;
@@ -58,7 +57,7 @@ fn send_ack(
     enc: &Option<TeleportEnc>,
 ) -> Result<(), TeleportError> {
     // Encode and send response
-    utils::send_packet(stream, TeleportAction::InitAck, enc, ack.to_bytes()?)
+    utils::send_packet(stream, TeleportAction::InitAck, enc, ack.serialize()?)
 }
 
 fn print_list(list: &MutexGuard<Vec<String>>) {
@@ -102,7 +101,9 @@ fn handle_connection(
         return send_ack(resp, &mut stream, &enc);
     }
 
-    let (_, header) = TeleportInit::from_bytes((&packet.data, 0))?;
+    let mut header = TeleportInit::new(TeleportFeatures::NewFile);
+    header.deserialize(&packet.data)?;
+
     if packet.action != TeleportAction::Init as u8 {
         let resp = TeleportInitAck::new(TeleportStatus::EncryptionError);
         return send_ack(resp, &mut stream, &enc);
@@ -248,7 +249,8 @@ fn handle_connection(
                 break;
             }
         };
-        let (_, chunk) = TeleportData::from_bytes((&packet.data, 0))?;
+        let mut chunk = TeleportData::new();
+        chunk.deserialize(&packet.data)?;
 
         if chunk.data_len == 0 {
             if received == header.filesize
