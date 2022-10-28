@@ -2,7 +2,7 @@ use crate::*;
 use byteorder::{LittleEndian, ReadBytesExt};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct TeleportHeader {
     protocol: u64,
     data_len: u32,
@@ -11,7 +11,7 @@ pub struct TeleportHeader {
     pub data: Vec<u8>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TeleportAction {
     Init = 0x01,
     InitAck = 0x02,
@@ -100,7 +100,7 @@ impl TeleportHeader {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TeleportEnc {
     secret: [u8; 32],
     remote: [u8; 32],
@@ -147,17 +147,17 @@ impl TeleportEnc {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInit {
     pub version: [u16; 3],
     pub features: u32,
     pub chmod: u32,
     pub filesize: u64,
     pub filename_len: u16,
-    pub filename: Vec<char>,
+    pub filename: Vec<u8>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TeleportFeatures {
     NewFile = 0x01,
     Delta = 0x02,
@@ -180,7 +180,7 @@ impl TeleportInit {
             chmod: 0o644,
             filesize: 0,
             filename_len: 0,
-            filename: Vec::<char>::new(),
+            filename: Vec::<u8>::new(),
         }
     }
 
@@ -211,7 +211,7 @@ impl TeleportInit {
         Ok(out)
     }
 
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
         let mut buf: &[u8] = input;
 
         // Extract version info
@@ -233,19 +233,16 @@ impl TeleportInit {
 
         // Extract filename
         let fname = &buf[..self.filename_len as usize].to_vec();
-        self.filename = fname.iter().map(|x| *x as char).collect();
+        self.filename = fname.to_vec();
         if self.filename.len() != self.filename_len as usize {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Filename incorrect length",
-            ));
+            return Err(TeleportError::InvalidFileName);
         }
 
         Ok(())
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInitAck {
     pub status: u8,
     pub version: [u16; 3],
@@ -253,7 +250,7 @@ pub struct TeleportInitAck {
     pub delta: Option<TeleportDelta>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TeleportStatus {
     Proceed,
     NoOverwrite,
@@ -262,6 +259,7 @@ pub enum TeleportStatus {
     WrongVersion,
     RequiresEncryption,
     EncryptionError,
+    BadFileName,
     UnknownAction,
 }
 
@@ -372,7 +370,7 @@ impl TeleportInitAck {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportDelta {
     pub filesize: u64,
     pub hash: u64,
@@ -472,7 +470,7 @@ impl TeleportDelta {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct TeleportData {
     pub offset: u64,
     pub data_len: u32,
@@ -617,7 +615,7 @@ mod tests {
     fn test_teleportinit_serialize() {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
         test.version = [0, 5, 5];
-        test.filename = vec!['f', 'i', 'l', 'e'];
+        test.filename = vec![b'f', b'i', b'l', b'e'];
         test.filesize = 12345;
         test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
@@ -630,7 +628,7 @@ mod tests {
     fn test_teleportinit_deserialize() {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
         test.version = [0, 5, 5];
-        test.filename = vec!['f', 'i', 'l', 'e'];
+        test.filename = vec![b'f', b'i', b'l', b'e'];
         test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
         test.chmod = 0o755;

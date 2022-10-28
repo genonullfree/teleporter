@@ -65,7 +65,7 @@ pub fn send_packet(
     action: TeleportAction,
     enc: &Option<TeleportEnc>,
     data: Vec<u8>,
-) -> Result<(), Error> {
+) -> Result<(), TeleportError> {
     let mut header = TeleportHeader::new(action);
 
     // If encryption is enabled
@@ -99,7 +99,7 @@ pub fn send_packet(
 pub fn recv_packet(
     sock: &mut TcpStream,
     dec: &Option<TeleportEnc>,
-) -> Result<TeleportHeader, Error> {
+) -> Result<TeleportHeader, TeleportError> {
     let mut initbuf: [u8; 13] = [0; 13];
     loop {
         let len = sock.peek(&mut initbuf)?;
@@ -111,7 +111,7 @@ pub fn recv_packet(
     let mut init: &[u8] = &initbuf;
     let protocol = init.read_u64::<LittleEndian>().unwrap();
     if protocol != PROTOCOL {
-        return Err(Error::new(ErrorKind::InvalidData, "Invalid protocol"));
+        return Err(TeleportError::InvalidProtocol);
     }
 
     let packet_len = init.read_u32::<LittleEndian>().unwrap();

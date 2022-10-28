@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 /// Server function sets up a listening socket for any incoming connnections
-pub fn run(opt: Opt) -> Result<(), Error> {
+pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
     // Bind to all interfaces on specified Port
     let listener = match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
         Ok(l) => l,
@@ -17,7 +17,7 @@ pub fn run(opt: Opt) -> Result<(), Error> {
                 "Cannot bind to port: {:?}. Is Teleporter already running?",
                 &opt.port
             );
-            return Err(s);
+            return Err(TeleportError::Io(s));
         }
     };
 
@@ -55,7 +55,7 @@ fn send_ack(
     ack: TeleportInitAck,
     stream: &mut TcpStream,
     enc: &Option<TeleportEnc>,
-) -> Result<(), Error> {
+) -> Result<(), TeleportError> {
     // Encode and send response
     utils::send_packet(stream, TeleportAction::InitAck, enc, ack.serialize()?)
 }
@@ -79,8 +79,8 @@ fn rm_filename_from_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
 fn handle_connection(
     mut stream: TcpStream,
     recv_list: Arc<Mutex<Vec<String>>>,
-    opt: Opt,
-) -> Result<(), Error> {
+    opt: ListenOpt,
+) -> Result<(), TeleportError> {
     let start_time = Instant::now();
     let ip = stream.peer_addr().unwrap();
 
@@ -102,14 +102,14 @@ fn handle_connection(
     }
 
     let mut header = TeleportInit::new(TeleportFeatures::NewFile);
-    if packet.action == TeleportAction::Init as u8 {
-        header.deserialize(&packet.data)?;
-    } else {
+    header.deserialize(&packet.data)?;
+
+    if packet.action != TeleportAction::Init as u8 {
         let resp = TeleportInitAck::new(TeleportStatus::EncryptionError);
         return send_ack(resp, &mut stream, &enc);
     }
 
-    let mut filename: String = header.filename.iter().cloned().collect::<String>();
+    let mut filename: String = String::from_utf8(header.filename)?;
     let features: u32 = header.features;
 
     let version = Version::parse(VERSION).unwrap();
@@ -155,8 +155,20 @@ fn handle_connection(
     }
 
     // Create recursive dirs
-    if fs::create_dir_all(Path::new(&filename).parent().unwrap()).is_err() {
-        println!("Error: unable to create directories: {:?}", &filename);
+    let path = match Path::new(&filename).parent() {
+        Some(p) => p,
+        None => {
+            println!(
+                "Error: unable to parse the path and filename: {:?}",
+                &filename
+            );
+            let resp = TeleportInitAck::new(TeleportStatus::BadFileName);
+            return send_ack(resp, &mut stream, &enc);
+        }
+    };
+
+    if fs::create_dir_all(path).is_err() {
+        println!("Error: unable to create directories: {:?}", &path);
         let resp = TeleportInitAck::new(TeleportStatus::NoPermission);
         return send_ack(resp, &mut stream, &enc);
     };

@@ -11,48 +11,56 @@ Teleporter now does delta file transfers using the xxHash3 hashing algorithm for
 The protocol Teleporter implements to transfer files is called Teleport and is defined in ``PROTOCOL.md``.
 
 # Usage
-```
-Teleporter is a simple application for sending files from Point A to Point B
 
+## Receiving Files
+
+To start a teleporter in server (receiving) mode, just run:
+```
+teleporter listen
+```
+Teleporter will default to listening on `0.0.0.0:9001` for incoming connections.
+
+Here are some additional options for receiving files:
+```
 USAGE:
-    teleporter [OPTIONS]
+    teleporter listen [OPTIONS]
 
 OPTIONS:
         --allow-dangerous-filepath    Allow absolute and relative file paths for transfers (server
                                       only) [WARNING: potentially dangerous option, use at your own
                                       risk!]
-    -b, --backup                      Backup the destination file to a ".bak" extension if it exists
-                                      and is being overwritten (consecutive runs will replace the
-                                      *.bak file)
-    -d, --dest <DEST>                 Destination teleporter IP address [default: 127.0.0.1]
-    -e, --encrypt                     Encrypt the file transfer using ECDH key-exchange and random
-                                      keys
-    -f, --filename-append             If the destination file exists, append a ".1" (or next
-                                      available number) to the filename instead of overwriting
     -h, --help                        Print help information
-    -i, --input <INPUT>               List of filepaths to files that will be teleported [default: ]
-    -k, --keep-path                   Keep path info (recreate directory path on remote server)
     -m, --must-encrypt                Require encryption for incoming connections to the server
-    -n, --no-delta                    Disable delta transfer (overwrite will transfer entire file)
-    -o, --overwrite                   Overwrite remote file
     -p, --port <PORT>                 Destination teleporter Port, or Port to listen on [default:
                                       9001]
-    -r, --recursive                   Recurse into directories on send
 ```
 
-To start a teleporter in server (receiving) mode, just run:
-```
-teleporter
-```
-or
-```
-cargo run
-```
-Teleporter will default to listening on `0.0.0.0:9001` for incoming connections.
+## Sending Files
 
 To start a teleporter in client (sending) mode, run:
 ```
-teleporter [-d <destination IP>] -i <file> [[file2] [file3] ...]
+teleporter send [-d <destination IP>] -i <file> [[file2] [file3] ...]
+```
+
+Here are some additional arguments for sending files:
+```
+USAGE:
+    teleporter send [OPTIONS]
+
+OPTIONS:
+    -b, --backup              Backup the destination file to a ".bak" extension if it exists and is
+                              being overwritten (consecutive runs will replace the *.bak file)
+    -d, --dest <DEST>         Destination teleporter IP address [default: 127.0.0.1]
+    -e, --encrypt             Encrypt the file transfer using ECDH key-exchange and random keys
+    -f, --filename-append     If the destination file exists, append a ".1" (or next available
+                              number) to the filename instead of overwriting
+    -h, --help                Print help information
+    -i, --input <INPUT>...    List of filepaths to files that will be teleported [default: ]
+    -k, --keep-path           Keep path info (recreate directory path on remote server)
+    -n, --no-delta            Disable delta transfer (overwrite will transfer entire file)
+    -o, --overwrite           Overwrite remote file
+    -p, --port <PORT>         Destination teleporter Port, or Port to listen on [default: 9001]
+    -r, --recursive           Recurse into directories on send
 ```
 
 Teleporter will transfer files with their name information as well as their file permissions. Any file path information will be lost unless the `-k` option is enabled. All the received files will be written out in the CWD where the server side was started unless the server was started with the `--allow-dangerous-filepath` option. When overwriting a file with the `-o` option, additional modifiers can be used, such as `-b` to make a backup of the original file, or `-n` to disable delta file transfers and always overwrite the entire file. 
@@ -71,7 +79,7 @@ For example, given the following command:
 
 If you have Rust and Cargo installed, Teleporter can be quickly compiled and installed by running the following command:
 ```
-cargo install teleporter
+cargo install --locked teleporter
 ```
 This will install Teleporter to `~/.cargo/bin/teleporter`, which might need to be added to your shell's `PATH` variable.
 
