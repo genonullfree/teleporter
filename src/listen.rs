@@ -44,9 +44,11 @@ pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
         // Receive connections in recv function
         let recv_list_clone = Arc::clone(&recv_list);
         thread::spawn(move || {
-            if let Err(e) = handle_connection(s, recv_list_clone, args) {
+            if let Err(e) = handle_connection(s, &recv_list_clone, args) {
                 println!("Error: {:?}", e);
             }
+            let recv_list = recv_list_clone.lock().unwrap();
+            print_list(&recv_list);
         });
     }
 
@@ -74,13 +76,11 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
 fn rm_filename_from_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
     let mut recv_data = list.lock().unwrap();
     recv_data.retain(|x| x != filename);
-    print_list(&recv_data);
-    drop(recv_data);
 }
 
 fn handle_connection(
     mut stream: TcpStream,
-    recv_list: Arc<Mutex<Vec<String>>>,
+    recv_list: &Arc<Mutex<Vec<String>>>,
     opt: ListenOpt,
 ) -> Result<(), TeleportError> {
     let start_time = Instant::now();
@@ -232,7 +232,7 @@ fn handle_connection(
                 "Connection closed (reason: {:?}). Aborted {} transfer.",
                 e, &filename
             );
-            rm_filename_from_list(&filename, &recv_list);
+            rm_filename_from_list(&filename, recv_list);
             return Ok(());
         }
     }
@@ -297,7 +297,7 @@ fn handle_connection(
         }
     }
 
-    rm_filename_from_list(&filename, &recv_list);
+    rm_filename_from_list(&filename, recv_list);
 
     Ok(())
 }
