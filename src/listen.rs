@@ -44,7 +44,9 @@ pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
         // Receive connections in recv function
         let recv_list_clone = Arc::clone(&recv_list);
         thread::spawn(move || {
-            handle_connection(s, recv_list_clone, args).unwrap();
+            if let Err(e) = handle_connection(s, recv_list_clone, args) {
+                println!("Error: {:?}", e);
+            }
         });
     }
 
