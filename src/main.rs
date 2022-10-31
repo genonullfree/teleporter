@@ -26,72 +26,74 @@ use errors::TeleportError;
 
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
 pub enum Cmd {
+    /// Start a teleporter in server (receiving) mode
     Listen(ListenOpt),
+    /// Start a teleporter in client (sending) mode
     Send(SendOpt),
 }
 
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
 pub struct Opt {
     /// Command
-    #[clap(subcommand)]
+    #[command(subcommand)]
     cmd: Cmd,
 }
 
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
 pub struct SendOpt {
     /// List of filepaths to files that will be teleported
-    #[clap(short, long, multiple_values = true, default_value = "")]
+    #[arg(short, long, num_args = ..)]
     input: Vec<PathBuf>,
 
     /// Destination teleporter IP address
-    #[clap(short, long, default_value = "127.0.0.1")]
-    dest: String,
+    #[arg(short, long, default_value_t = Ipv4Addr::LOCALHOST)]
+    dest: Ipv4Addr,
 
     /// Destination teleporter Port
-    #[clap(short, long, default_value = "9001")]
+    #[arg(short, long, default_value = "9001")]
     port: u16,
 
     /// Overwrite remote file
-    #[clap(short, long)]
+    #[arg(short, long)]
     overwrite: bool,
 
     /// Recurse into directories on send
-    #[clap(short, long)]
+    #[arg(short, long)]
     recursive: bool,
 
     /// Encrypt the file transfer using ECDH key-exchange and random keys
-    #[clap(short, long)]
+    #[arg(short, long)]
     encrypt: bool,
 
     /// Disable delta transfer (overwrite will transfer entire file)
-    #[clap(short, long)]
+    #[arg(short, long)]
     no_delta: bool,
 
     /// Keep path info (recreate directory path on remote server)
-    #[clap(short, long)]
+    #[arg(short, long)]
     keep_path: bool,
 
     /// Backup the destination file to a ".bak" extension if it exists and is being overwritten (consecutive runs will replace the *.bak file)
-    #[clap(short, long)]
+    #[arg(short, long)]
     backup: bool,
 
     /// If the destination file exists, append a ".1" (or next available number) to the filename instead of overwriting
-    #[clap(short, long)]
+    #[arg(short, long)]
     filename_append: bool,
 }
 
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
 pub struct ListenOpt {
     /// Allow absolute and relative file paths for transfers (server only) [WARNING: potentially dangerous option, use at your own risk!]
-    #[clap(long)]
+    #[arg(long)]
     allow_dangerous_filepath: bool,
 
     /// Require encryption for incoming connections to the server
-    #[clap(short, long)]
+    #[arg(short, long)]
     must_encrypt: bool,
 
     /// Port to listen on
-    #[clap(short, long, default_value = "9001")]
+    #[arg(short, long, default_value = "9001")]
     port: u16,
 }
 
