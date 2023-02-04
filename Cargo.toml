@@ -22,7 +22,6 @@ generic-array = "0.14"
 x25519-dalek = "1.2"
 semver = "1.0"
 rand = "0.7"
-deku = "0.15"
 thiserror = "1.0"
 
 [profile.size]

@@ -7,9 +7,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum TeleportError {
-    #[error("DekuError: {0}")]
-    Deku(#[from] deku::DekuError),
-
     #[error("IoError: {0}")]
     Io(#[from] io::Error),
 
