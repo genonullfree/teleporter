@@ -23,6 +23,13 @@ mod utils;
 use errors::TeleportError;
 
 /// Teleporter is a simple application for sending files from Point A to Point B
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
+#[command(version)]
+pub struct Opt {
+    /// Command
+    #[command(subcommand)]
+    cmd: Cmd,
+}
 
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
 pub enum Cmd {
@@ -30,13 +37,6 @@ pub enum Cmd {
     Listen(ListenOpt),
     /// Start a teleporter in client (sending) mode
     Send(SendOpt),
-}
-
-#[derive(Clone, Debug, Parser, PartialEq, Eq)]
-pub struct Opt {
-    /// Command
-    #[command(subcommand)]
-    cmd: Cmd,
 }
 
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
