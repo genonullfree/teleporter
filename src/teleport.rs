@@ -43,7 +43,7 @@ impl TeleportHeader {
         out.append(&mut self.data_len.to_le_bytes().to_vec());
 
         // Add action code
-        let mut action = self.action as u8;
+        let mut action = self.action;
         if self.iv.is_some() {
             action |= TeleportAction::Encrypted as u8;
         }
@@ -193,7 +193,7 @@ impl TeleportInit {
         }
 
         // Add features
-        out.append(&mut (self.features as u32).to_le_bytes().to_vec());
+        out.append(&mut self.features.to_le_bytes().to_vec());
 
         // Add chmod
         out.append(&mut self.chmod.to_le_bytes().to_vec());
@@ -206,7 +206,7 @@ impl TeleportInit {
         out.append(&mut flen.to_le_bytes().to_vec());
 
         // Add filename
-        out.append(&mut self.filename.iter().map(|x| *x as u8).collect());
+        out.append(&mut self.filename.to_vec());
 
         Ok(out)
     }
@@ -306,7 +306,7 @@ impl TeleportInitAck {
         let mut out = Vec::<u8>::new();
 
         // Add status
-        let status = self.status as u8;
+        let status = self.status;
         out.append(&mut vec![status]);
 
         // Add version
@@ -320,7 +320,7 @@ impl TeleportInitAck {
         }
 
         // Add optional features
-        let feat = self.features.unwrap() as u32;
+        let feat = self.features.unwrap();
         out.append(&mut feat.to_le_bytes().to_vec());
 
         // If no delta, return early

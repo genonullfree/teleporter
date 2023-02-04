@@ -18,7 +18,7 @@ struct UpdateUnit {
 }
 
 pub fn print_updates(received: f64, header: &TeleportInit) {
-    let units = update_units(received as f64, header.filesize as f64);
+    let units = update_units(received, header.filesize as f64);
     print!(
         "\r => {:>8.03}{} of {:>8.03}{} ({:02.02}%)",
         units.partial.value, units.partial.unit, units.total.value, units.total.unit, units.percent
@@ -27,7 +27,7 @@ pub fn print_updates(received: f64, header: &TeleportInit) {
 }
 
 fn update_units(partial: f64, total: f64) -> UpdateUnit {
-    let percent: f64 = (partial as f64 / total as f64) * 100f64;
+    let percent: f64 = (partial / total) * 100f64;
     let p = identify_unit(partial);
     let t = identify_unit(total);
 
@@ -185,7 +185,7 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
     let meta = file.metadata()?;
     let file_size = meta.len();
 
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
     let mut buf = Vec::<u8>::new();
     buf.resize(gen_chunk_size(meta.len()), 0);
     let mut whole_hasher = xxh3::Xxh3::new();
@@ -209,12 +209,12 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
     }
 
     let mut out = teleport::TeleportDelta::new();
-    out.filesize = file_size as u64;
+    out.filesize = file_size;
     out.chunk_size = buf.len().try_into().unwrap();
     out.hash = whole_hasher.finish();
     out.chunk_hash = chunk_hash;
 
-    file.seek(SeekFrom::Start(0))?;
+    file.rewind()?;
 
     Ok(out)
 }

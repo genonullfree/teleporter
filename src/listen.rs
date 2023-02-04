@@ -45,7 +45,7 @@ pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
         let recv_list_clone = Arc::clone(&recv_list);
         thread::spawn(move || {
             if let Err(e) = handle_connection(s, &recv_list_clone, args) {
-                println!("Error: {:?}", e);
+                println!("Error: {e:?}");
             }
             let recv_list = recv_list_clone.lock().unwrap();
             print_list(&recv_list);
@@ -68,7 +68,7 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
     if list.len() == 0 {
         print!("\rListening...");
     } else {
-        print!("\rReceiving: {:?}", list);
+        print!("\rReceiving: {list:?}");
     }
     io::stdout().flush().unwrap();
 }
