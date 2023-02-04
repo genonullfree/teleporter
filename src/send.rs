@@ -21,7 +21,7 @@ fn get_file_list(opt: &SendOpt) -> Vec<String> {
             let mut tmp = match scope_dir(item) {
                 Ok(t) => t,
                 Err(_) => {
-                    println!("Error: Cannot read item: {:?}", item);
+                    println!("Error: Cannot read item: {item:?}");
                     continue;
                 }
             };
@@ -52,7 +52,7 @@ fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
             let mut tmp = match scope_dir(&entry.as_ref().unwrap().path()) {
                 Ok(t) => t,
                 Err(_) => {
-                    println!("Error: Cannot read dir: {:?}", entry);
+                    println!("Error: Cannot read dir: {entry:?}");
                     continue;
                 }
             };
@@ -80,14 +80,14 @@ fn find_replacements(opt: &mut SendOpt) -> Replace {
     // Iterate over the input list
     for (idx, item) in opt.input.iter().enumerate() {
         // If it is a filename, no rename is happening
-        if File::open(&item).is_ok() {
+        if File::open(item).is_ok() {
             continue;
         }
 
         let path = item.to_str().unwrap();
 
         // If the path name contains ':'
-        if path.contains(&":") {
+        if path.contains(':') {
             // Split on ':' and use the first as original name
             // and the second as the new name
             let mut split = path.split(':');
@@ -120,7 +120,7 @@ fn find_replacements(opt: &mut SendOpt) -> Replace {
 
 /// Client function sends filename and file data for each filepath
 pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
-    print!("Teleporter Client {} => ", VERSION);
+    print!("Teleporter Client {VERSION} => ");
     let start_time = Instant::now();
     let mut sent = 0;
     let mut skip = 0;
@@ -154,15 +154,15 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         }
 
         // Validate file
-        let file = match File::open(&filepath) {
+        let file = match File::open(filepath) {
             Ok(f) => f,
             Err(s) => {
-                println!("Error opening file: {}", filepath);
+                println!("Error opening file: {filepath}");
                 return Err(TeleportError::Io(s));
             }
         };
 
-        let thread_file = File::open(&filepath)?;
+        let thread_file = File::open(filepath)?;
         // Skip if opt.no_delta present, otherwise calculate the delta hash of the file
         let handle = match opt.overwrite && !opt.no_delta {
             true => Some(thread::spawn(move || {
@@ -319,7 +319,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         // Print file transfer statistics
         let duration = file_time.elapsed();
         let speed = (header.filesize as f64 * 8.0) / duration.as_secs() as f64 / 1024.0 / 1024.0;
-        println!(" done! Time: {:.2?} Speed: {:.3} Mbps", duration, speed);
+        println!(" done! Time: {duration:.2?} Speed: {speed:.3} Mbps");
     }
     let total_time = start_time.elapsed();
     println!(

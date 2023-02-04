@@ -113,6 +113,6 @@ fn main() {
     // Display any errors
     match out {
         Ok(()) => {}
-        Err(s) => println!("Error: {}", s),
+        Err(s) => println!("Error: {s}"),
     };
 }

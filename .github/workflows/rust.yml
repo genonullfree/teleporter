@@ -10,105 +10,73 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  linux-fmt:
-    name: Rustfmt
+  # fmt and clippy
+  fmt-clippy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - run: rustup component add rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
 
-  linux-check:
-    name: Build
-    needs: linux-fmt
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # fmt
+      - run: cargo fmt --all -- --check
+
+      # clippy
+      - run: cargo clippy -- -D warnings
+
+  # build, test all supported targets
+  build-test-stable:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        targets:
+          - x86_64-unknown-linux-musl
+          - x86_64-unknown-linux-gnu
+        toolchain:
+          # msrv
+          - 1.64.0
+          - stable
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
+          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.targets }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install cross --git https://github.com/cross-rs/cross
+      - run: cross build --locked --workspace --target ${{ matrix.targets }}
+      - run: cross build --locked --workspace --target ${{ matrix.targets }} --release
+      - run: cross test --locked --workspace --target ${{ matrix.targets }}
+      - uses: actions/upload-artifact@v3
         with:
-          command: build
+          name: teleporter-${{ matrix.targets }}
+          path: target/${{ matrix.targets }}/release/teleporter
 
-  linux-test:
-    name: Linux Test Suite
-    needs: linux-check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-
-  linux-release:
-    name: Release Linux x86_64
-    needs: linux-test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          target: x86_64-unknown-linux-gnu
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
-      - uses: actions/upload-artifact@v2.2.4
-        with:
-          name: teleporter-linux-x86_64
-          path: target/release/teleporter
-
-  macos-test:
-    name: MacOS Test Suite
-    needs: linux-check
+  build-test-macos:
     runs-on: macos-latest
+    strategy:
+      matrix:
+        targets:
+          - x86_64-apple-darwin
+        toolchain:
+          # msrv
+          - 1.64.0
+          - stable
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
+          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.targets }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --workspace --target ${{ matrix.targets }}
+      - run: cargo build --locked --workspace --target ${{ matrix.targets }} --release
+      - run: cargo test --locked --workspace --target ${{ matrix.targets }}
+      - uses: actions/upload-artifact@v3
         with:
-          command: test
-
-  macos-release:
-    name: Release Darwin x86_64
-    needs: macos-test
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          target: x86_64-apple-darwin 
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release
-      - uses: actions/upload-artifact@v2.2.4
-        with:
-          name: teleporter-darwin-x86_64
-          path: target/release/teleporter
+          name: teleporter-${{ matrix.targets }}
+          path: target/${{ matrix.targets }}/release/teleporter
