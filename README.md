@@ -22,17 +22,14 @@ Teleporter will default to listening on `0.0.0.0:9001` for incoming connections.
 
 Here are some additional options for receiving files:
 ```
-USAGE:
-    teleporter listen [OPTIONS]
+Usage: teleporter listen [OPTIONS]
 
-OPTIONS:
-        --allow-dangerous-filepath    Allow absolute and relative file paths for transfers (server
-                                      only) [WARNING: potentially dangerous option, use at your own
-                                      risk!]
-    -h, --help                        Print help information
-    -m, --must-encrypt                Require encryption for incoming connections to the server
-    -p, --port <PORT>                 Destination teleporter Port, or Port to listen on [default:
-                                      9001]
+Options:
+      --allow-dangerous-filepath  Allow absolute and relative file paths for transfers (server only)
+                                  [WARNING: potentially dangerous option, use at your own risk!]
+  -m, --must-encrypt              Require encryption for incoming connections to the server
+  -p, --port <PORT>               Port to listen on [default: 9001]
+  -h, --help                      Print help
 ```
 
 ## Sending Files
@@ -44,23 +41,22 @@ teleporter send [-d <destination IP>] -i <file> [[file2] [file3] ...]
 
 Here are some additional arguments for sending files:
 ```
-USAGE:
-    teleporter send [OPTIONS]
+Usage: teleporter send [OPTIONS]
 
-OPTIONS:
-    -b, --backup              Backup the destination file to a ".bak" extension if it exists and is
-                              being overwritten (consecutive runs will replace the *.bak file)
-    -d, --dest <DEST>         Destination teleporter IP address [default: 127.0.0.1]
-    -e, --encrypt             Encrypt the file transfer using ECDH key-exchange and random keys
-    -f, --filename-append     If the destination file exists, append a ".1" (or next available
-                              number) to the filename instead of overwriting
-    -h, --help                Print help information
-    -i, --input <INPUT>...    List of filepaths to files that will be teleported [default: ]
-    -k, --keep-path           Keep path info (recreate directory path on remote server)
-    -n, --no-delta            Disable delta transfer (overwrite will transfer entire file)
-    -o, --overwrite           Overwrite remote file
-    -p, --port <PORT>         Destination teleporter Port, or Port to listen on [default: 9001]
-    -r, --recursive           Recurse into directories on send
+Options:
+  -i, --input [<INPUT>...]  List of filepaths to files that will be teleported
+  -d, --dest <DEST>         Destination teleporter IP address [default: 127.0.0.1]
+  -p, --port <PORT>         Destination teleporter Port [default: 9001]
+  -o, --overwrite           Overwrite remote file
+  -r, --recursive           Recurse into directories on send
+  -e, --encrypt             Encrypt the file transfer using ECDH key-exchange and random keys
+  -n, --no-delta            Disable delta transfer (overwrite will transfer entire file)
+  -k, --keep-path           Keep path info (recreate directory path on remote server)
+  -b, --backup              Backup the destination file to a ".bak" extension if it exists 
+                            and is being overwritten (consecutive runs will replace the *.bak file)
+  -f, --filename-append     If the destination file exists, append a ".1"(or next available number)
+                            to the filename instead of overwriting
+  -h, --help                Print help
 ```
 
 Teleporter will transfer files with their name information as well as their file permissions. Any file path information will be lost unless the `-k` option is enabled. All the received files will be written out in the CWD where the server side was started unless the server was started with the `--allow-dangerous-filepath` option. When overwriting a file with the `-o` option, additional modifiers can be used, such as `-b` to make a backup of the original file, or `-n` to disable delta file transfers and always overwrite the entire file. 
