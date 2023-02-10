@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::io::{Error, ErrorKind};
 use std::io::{Seek, SeekFrom};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
