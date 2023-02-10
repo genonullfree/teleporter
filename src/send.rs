@@ -3,6 +3,7 @@ use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportData, TeleportInit, TeleportInitAck};
 use crate::utils::print_updates;
 use crate::*;
+use std::net::ToSocketAddrs;
 use std::path::Path;
 
 #[derive(Debug)]
@@ -118,6 +119,21 @@ fn find_replacements(opt: &mut SendOpt) -> Replace {
     rep
 }
 
+fn connect_to_client(
+    ip_addrs: std::vec::IntoIter<std::net::SocketAddr>,
+) -> Result<TcpStream, TeleportError> {
+    for addr in ip_addrs {
+        match TcpStream::connect(addr) {
+            Ok(s) => return Ok(s),
+            Err(_) => {
+                continue;
+            }
+        };
+    }
+
+    Err(TeleportError::InvalidDest)
+}
+
 /// Client function sends filename and file data for each filepath
 pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
     print!("Teleporter Client {VERSION} => ");
@@ -211,19 +227,13 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         header.filename = filename.as_bytes().to_vec();
 
         // Connect to server
-        let addr = format!("{}:{}", opt.dest, opt.port);
-        let mut stream = match TcpStream::connect(match addr.parse::<SocketAddr>() {
+        let addr = match format!("{}:{}", opt.dest, opt.port).to_socket_addrs() {
             Ok(a) => a,
             Err(_) => {
                 return Err(TeleportError::InvalidDest);
             }
-        }) {
-            Ok(s) => s,
-            Err(s) => {
-                println!("Error connecting to: {}:{}", opt.dest, opt.port);
-                return Err(TeleportError::Io(s));
-            }
         };
+        let mut stream = connect_to_client(addr)?;
 
         // If encrypt is enabled
         if opt.encrypt {

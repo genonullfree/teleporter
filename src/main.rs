@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::io::{Error, ErrorKind};
 use std::io::{Seek, SeekFrom};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -45,11 +45,11 @@ pub struct SendOpt {
     #[arg(short, long, num_args = ..)]
     input: Vec<PathBuf>,
 
-    /// Destination teleporter IP address
-    #[arg(short, long, default_value_t = Ipv4Addr::LOCALHOST)]
-    dest: Ipv4Addr,
+    /// Destination teleporter host
+    #[arg(short, long, default_value = "localhost")]
+    dest: String,
 
-    /// Destination teleporter Port
+    /// Destination teleporter port
     #[arg(short, long, default_value = "9001")]
     port: u16,
 

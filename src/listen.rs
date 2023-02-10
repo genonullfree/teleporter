@@ -10,15 +10,18 @@ use std::sync::{Arc, Mutex, MutexGuard};
 /// Server function sets up a listening socket for any incoming connnections
 pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
     // Bind to all interfaces on specified Port
-    let listener = match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
+    let listener = match TcpListener::bind(SocketAddr::from((Ipv6Addr::UNSPECIFIED, opt.port))) {
         Ok(l) => l,
-        Err(s) => {
-            println!(
-                "Cannot bind to port: {:?}. Is Teleporter already running?",
-                &opt.port
-            );
-            return Err(TeleportError::Io(s));
-        }
+        Err(_) => match TcpListener::bind(SocketAddr::from((Ipv4Addr::UNSPECIFIED, opt.port))) {
+            Ok(l) => l,
+            Err(s) => {
+                println!(
+                    "Cannot bind to port: {:?}. Is Teleporter already running?",
+                    &opt.port
+                );
+                return Err(TeleportError::Io(s));
+            }
+        },
     };
 
     // Print welcome banner
