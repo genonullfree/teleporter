@@ -45,11 +45,11 @@ pub struct SendOpt {
     #[arg(short, long, num_args = ..)]
     input: Vec<PathBuf>,
 
-    /// Destination teleporter IP address
-    #[arg(short, long, default_value_t = Ipv4Addr::LOCALHOST)]
-    dest: Ipv4Addr,
+    /// Destination teleporter host
+    #[arg(short, long, default_value = "localhost")]
+    dest: String,
 
-    /// Destination teleporter Port
+    /// Destination teleporter port
     #[arg(short, long, default_value = "9001")]
     port: u16,
 

@@ -36,7 +36,7 @@ Options:
 
 To start a teleporter in client (sending) mode, run:
 ```
-teleporter send [-d <destination IP>] -i <file> [[file2] [file3] ...]
+teleporter send [-d <destination>] -i <file> [[file2] [file3] ...]
 ```
 
 Here are some additional arguments for sending files:
@@ -45,8 +45,8 @@ Usage: teleporter send [OPTIONS]
 
 Options:
   -i, --input [<INPUT>...]  List of filepaths to files that will be teleported
-  -d, --dest <DEST>         Destination teleporter IP address [default: 127.0.0.1]
-  -p, --port <PORT>         Destination teleporter Port [default: 9001]
+  -d, --dest <DEST>         Destination teleporter host [default: localhost]
+  -p, --port <PORT>         Destination teleporter port [default: 9001]
   -o, --overwrite           Overwrite remote file
   -r, --recursive           Recurse into directories on send
   -e, --encrypt             Encrypt the file transfer using ECDH key-exchange and random keys
