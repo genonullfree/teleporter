@@ -1,17 +1,15 @@
 use crate::errors::TeleportError;
 use crate::teleport;
-use crate::teleport::TeleportInit;
-use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportHeader};
+use crate::teleport::{
+    TeleportAction, TeleportEnc, TeleportFeatures, TeleportHeader, TeleportInit,
+};
 use crate::PROTOCOL;
 use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io;
-use std::io::Error;
-use std::io::Read;
-use std::io::Seek;
-use std::io::Write;
+use std::io::{Error, Read, Seek, Write};
 use std::net::TcpStream;
 use xxhash_rust::xxh3;
 

@@ -1,19 +1,14 @@
-use crate::crypto;
 use crate::errors::TeleportError;
 use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportData, TeleportDelta, TeleportEnc, TeleportInit, TeleportInitAck};
-use crate::utils;
-use crate::utils::print_updates;
 use crate::SendOpt;
 use crate::VERSION;
+use crate::{crypto, utils};
 use std::fs::File;
-use std::io::SeekFrom;
-use std::io::{Error, Read, Seek};
-use std::net::TcpStream;
-use std::net::ToSocketAddrs;
+use std::io::{Error, Read, Seek, SeekFrom};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Instant;
 
@@ -439,7 +434,7 @@ fn send(
         utils::send_packet(&mut stream, TeleportAction::Data, enc, chunk.serialize()?)?;
 
         sent += len;
-        print_updates(sent as f64, header);
+        utils::print_updates(sent as f64, header);
     }
 
     send_data_complete(stream, enc, meta.len())?;
