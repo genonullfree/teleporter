@@ -1,5 +1,9 @@
-use crate::*;
+use crate::crypto;
+use crate::errors::TeleportError;
+use crate::{PROTOCOL, VERSION};
 use byteorder::{LittleEndian, ReadBytesExt};
+use semver::Version;
+use std::io::{Error, ErrorKind};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 #[derive(Debug, PartialEq, Eq)]

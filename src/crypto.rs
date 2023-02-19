@@ -1,9 +1,9 @@
 use crate::teleport::TeleportEnc;
-use crate::{Error, ErrorKind};
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, KeyInit};
 use generic_array::GenericArray;
 use rand::rngs::OsRng;
+use std::io::{Error, ErrorKind};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 pub fn genkey(ctx: &mut TeleportEnc) -> EphemeralSecret {
