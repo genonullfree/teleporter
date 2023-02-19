@@ -27,4 +27,25 @@ pub enum TeleportError {
 
     #[error("Invalid file name")]
     InvalidFileName,
+
+    #[error("Error reading protcool header")]
+    InvalidHeaderRead,
+
+    #[error("Not enough data for IV")]
+    InvalidIV,
+
+    #[error("Data is not the expected length")]
+    InvalidLength,
+
+    #[error("Not enough data for public key")]
+    InvalidPubKey,
+
+    #[error("Unknown TeleportStatus code - update Teleporter?")]
+    InvalidStatusCode,
+
+    #[error("Cannot deserialize delta data")]
+    InvalidDelta,
+
+    #[error("Encryption failed")]
+    EncryptionFailure,
 }

@@ -3,7 +3,7 @@ use crate::errors::TeleportError;
 use crate::{PROTOCOL, VERSION};
 use byteorder::{LittleEndian, ReadBytesExt};
 use semver::Version;
-use std::io::{Error, ErrorKind};
+//use std::io::{Error, ErrorKind};
 use x25519_dalek::{EphemeralSecret, PublicKey};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,7 +36,7 @@ impl TeleportHeader {
         }
     }
 
-    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
+    pub fn serialize(&mut self) -> Result<Vec<u8>, TeleportError> {
         let mut out = Vec::<u8>::new();
 
         // Add Protocol identifier
@@ -64,13 +64,13 @@ impl TeleportHeader {
         Ok(out)
     }
 
-    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: Vec<u8>) -> Result<(), TeleportError> {
         let mut buf: &[u8] = &input;
 
         // Extract Protocol
         self.protocol = buf.read_u64::<LittleEndian>().unwrap();
         if self.protocol != PROTOCOL {
-            return Err(Error::new(ErrorKind::InvalidData, "Error reading protocol"));
+            return Err(TeleportError::InvalidHeaderRead);
         }
 
         // Extract data length
@@ -84,7 +84,7 @@ impl TeleportHeader {
         // If Encrypted, extract IV
         if (action & TeleportAction::Encrypted as u8) == TeleportAction::Encrypted as u8 {
             if input.len() < 25 {
-                return Err(Error::new(ErrorKind::InvalidData, "Not enough data for IV"));
+                return Err(TeleportError::InvalidIV);
             }
             let iv: [u8; 12] = input[13..25].try_into().expect("Error reading IV");
             self.iv = Some(iv);
@@ -94,10 +94,7 @@ impl TeleportHeader {
         // Extract data
         self.data = input[data_ofs..].to_vec();
         if self.data.len() != self.data_len as usize {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Data is not the expected length",
-            ));
+            return Err(TeleportError::InvalidLength);
         }
 
         Ok(())
@@ -124,12 +121,9 @@ impl TeleportEnc {
         self.public.to_vec()
     }
 
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
         if input.len() < 32 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Not enough data for public key",
-            ));
+            return Err(TeleportError::InvalidPubKey);
         }
 
         self.remote = input[..32].try_into().expect("Error reading public key");
@@ -142,11 +136,11 @@ impl TeleportEnc {
         self.secret = privkey.diffie_hellman(&pubkey).to_bytes()
     }
 
-    pub fn encrypt(self, nonce: &[u8; 12], input: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn encrypt(self, nonce: &[u8; 12], input: &[u8]) -> Result<Vec<u8>, TeleportError> {
         crypto::encrypt(&self.secret, nonce.to_vec(), input.to_vec())
     }
 
-    pub fn decrypt(self, nonce: &[u8; 12], input: &[u8]) -> Result<Vec<u8>, Error> {
+    pub fn decrypt(self, nonce: &[u8; 12], input: &[u8]) -> Result<Vec<u8>, TeleportError> {
         crypto::decrypt(&self.secret, nonce.to_vec(), input.to_vec())
     }
 }
@@ -188,7 +182,7 @@ impl TeleportInit {
         }
     }
 
-    pub fn serialize(&self) -> Result<Vec<u8>, Error> {
+    pub fn serialize(&self) -> Result<Vec<u8>, TeleportError> {
         let mut out = Vec::<u8>::new();
 
         // Add version
@@ -268,7 +262,7 @@ pub enum TeleportStatus {
 }
 
 impl TryFrom<u8> for TeleportStatus {
-    type Error = std::io::Error;
+    type Error = TeleportError;
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
         match v {
@@ -282,10 +276,7 @@ impl TryFrom<u8> for TeleportStatus {
             }
             x if x == TeleportStatus::EncryptionError as u8 => Ok(TeleportStatus::EncryptionError),
             x if x == TeleportStatus::UnknownAction as u8 => Ok(TeleportStatus::UnknownAction),
-            _ => Err(Error::new(
-                ErrorKind::InvalidData,
-                "Unknown TeleportStatus code - update Teleporter?",
-            )),
+            _ => Err(TeleportError::InvalidStatusCode),
         }
     }
 }
@@ -306,7 +297,7 @@ impl TeleportInitAck {
         }
     }
 
-    pub fn serialize(self) -> Result<Vec<u8>, Error> {
+    pub fn serialize(self) -> Result<Vec<u8>, TeleportError> {
         let mut out = Vec::<u8>::new();
 
         // Add status
@@ -340,7 +331,7 @@ impl TeleportInitAck {
         Ok(out)
     }
 
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
         let mut buf: &[u8] = input;
 
         // Extract status
@@ -404,7 +395,7 @@ impl TeleportDelta {
         out
     }
 
-    pub fn serialize(self) -> Result<Vec<u8>, Error> {
+    pub fn serialize(self) -> Result<Vec<u8>, TeleportError> {
         let mut out = Vec::<u8>::new();
 
         // Add file size
@@ -426,12 +417,9 @@ impl TeleportDelta {
         Ok(out)
     }
 
-    fn delta_deserial(input: &[u8], len: u16) -> Result<Vec<u64>, Error> {
+    fn delta_deserial(input: &[u8], len: u16) -> Result<Vec<u64>, TeleportError> {
         if input.len() % 8 != 0 || len as usize != input.len() / 8 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Cannot deserialize Vec<u64>",
-            ));
+            return Err(TeleportError::InvalidDelta);
         }
 
         let mut out = Vec::<u64>::new();
@@ -446,14 +434,11 @@ impl TeleportDelta {
         Ok(out)
     }
 
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
         let mut buf: &[u8] = input;
 
         if input.len() < 22 {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Not enough data for Delta deserialize",
-            ));
+            return Err(TeleportError::InvalidLength);
         }
 
         self.filesize = buf.read_u64::<LittleEndian>().unwrap();
@@ -490,7 +475,7 @@ impl TeleportData {
         }
     }
 
-    pub fn serialize(&mut self) -> Result<Vec<u8>, Error> {
+    pub fn serialize(&mut self) -> Result<Vec<u8>, TeleportError> {
         let mut out = Vec::<u8>::new();
 
         // Add offset
@@ -506,7 +491,7 @@ impl TeleportData {
         Ok(out)
     }
 
-    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), Error> {
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
         let mut buf: &[u8] = input;
 
         // Extract offset
@@ -518,10 +503,7 @@ impl TeleportData {
         // Extract data
         self.data = input[12..].to_vec();
         if self.data.len() != self.data_len as usize {
-            return Err(Error::new(
-                ErrorKind::InvalidData,
-                "Filename incorrect length",
-            ));
+            return Err(TeleportError::InvalidLength);
         }
 
         Ok(())
