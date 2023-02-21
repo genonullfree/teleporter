@@ -30,7 +30,7 @@ pub fn print_updates(received: f64, header: &TeleportInit) {
         "\r => {:>8.03}{} of {:>8.03}{} ({:02.02}%)",
         units.partial.value, units.partial.unit, units.total.value, units.total.unit, units.percent
     );
-    io::stdout().flush().unwrap();
+    io::stdout().flush().expect("Fatal IO error");
 }
 
 fn update_units(partial: f64, total: f64) -> UpdateUnit {
@@ -116,13 +116,13 @@ pub fn recv_packet(
     }
 
     let mut init: &[u8] = &initbuf;
-    let protocol = init.read_u64::<LittleEndian>().unwrap();
+    let protocol = init.read_u64::<LittleEndian>()?;
     if protocol != PROTOCOL {
         return Err(TeleportError::InvalidProtocol);
     }
 
-    let packet_len = init.read_u32::<LittleEndian>().unwrap();
-    let action = init.read_u8().unwrap();
+    let packet_len = init.read_u32::<LittleEndian>()?;
+    let action = init.read_u8()?;
 
     // Include IV size in length
     let mut total_len = 13 + packet_len as usize;
@@ -142,7 +142,7 @@ pub fn recv_packet(
     if encrypted {
         out.action ^= TeleportAction::Encrypted as u8;
         if let Some(ctx) = dec {
-            out.data = ctx.decrypt(&out.iv.unwrap(), &out.data)?;
+            out.data = ctx.decrypt(&out.iv.expect("Fatal decrypt error"), &out.data)?;
         }
     }
 
@@ -188,7 +188,7 @@ pub fn check_feature(opt: &Option<u32>, check: TeleportFeatures) -> bool {
 }
 
 // Called from server
-pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error> {
+pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, TeleportError> {
     let meta = file.metadata()?;
     let file_size = meta.len();
 
@@ -203,7 +203,7 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
         // Read a chunk of the file
         let len = match file.read(&mut buf) {
             Ok(l) => l,
-            Err(s) => return Err(s),
+            Err(s) => return Err(TeleportError::Io(s)),
         };
         if len == 0 {
             break;
@@ -217,7 +217,7 @@ pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, Error
 
     let mut out = teleport::TeleportDelta::new();
     out.filesize = file_size;
-    out.chunk_size = buf.len().try_into().unwrap();
+    out.chunk_size = buf.len().try_into()?;
     out.hash = whole_hasher.finish();
     out.chunk_hash = chunk_hash;
 

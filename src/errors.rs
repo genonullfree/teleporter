@@ -1,5 +1,5 @@
 use std::io;
-use std::num::ParseIntError;
+use std::num::{ParseIntError, TryFromIntError};
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 
@@ -18,6 +18,9 @@ pub enum TeleportError {
 
     #[error("Error in conversion of Int")]
     ParseIntError(#[from] ParseIntError),
+
+    #[error("Error trying to convert from Int")]
+    TryFromIntError(#[from] TryFromIntError),
 
     #[error("Error with destination address")]
     InvalidDest,
