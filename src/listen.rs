@@ -59,7 +59,9 @@ pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
             if let Err(e) = handle_connection(s, &recv_list_clone, args) {
                 println!("Error: {e:?}");
             }
-            let recv_list = recv_list_clone.lock().unwrap();
+            let recv_list = recv_list_clone
+                .lock()
+                .expect("Fatal error locking recv_list_clone");
             print_list(&recv_list);
         });
     }
@@ -82,11 +84,11 @@ fn print_list(list: &MutexGuard<Vec<String>>) {
     } else {
         print!("\rReceiving: {list:?}");
     }
-    io::stdout().flush().unwrap();
+    io::stdout().flush().expect("Fatal error flushing stdout");
 }
 
 fn rm_filename_from_list(filename: &str, list: &Arc<Mutex<Vec<String>>>) {
-    let mut recv_data = list.lock().unwrap();
+    let mut recv_data = list.lock().expect("Fatal error locking file list");
     recv_data.retain(|x| x != filename);
 }
 
@@ -96,7 +98,7 @@ fn handle_connection(
     opt: ListenOpt,
 ) -> Result<(), TeleportError> {
     let start_time = Instant::now();
-    let ip = stream.peer_addr().unwrap();
+    let ip = stream.peer_addr()?;
 
     let mut enc: Option<TeleportEnc> = None;
 
@@ -126,7 +128,7 @@ fn handle_connection(
     let mut filename: String = String::from_utf8(header.filename)?;
     let features: u32 = header.features;
 
-    let version = Version::parse(VERSION).unwrap();
+    let version = Version::parse(VERSION).expect("Fatal version error");
     let compatible =
         { version.major as u16 == header.version[0] && version.minor as u16 == header.version[1] };
 
@@ -219,7 +221,7 @@ fn handle_connection(
     utils::add_feature(&mut resp.features, TeleportFeatures::NewFile)?;
 
     // Add file to list
-    let mut recv_data = recv_list.lock().unwrap();
+    let mut recv_data = recv_list.lock().expect("Fatal error locking recv_list");
     recv_data.push(filename.clone());
     print_list(&recv_data);
     drop(recv_data);

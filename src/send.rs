@@ -5,7 +5,7 @@ use crate::SendOpt;
 use crate::VERSION;
 use crate::{crypto, utils};
 use std::fs::File;
-use std::io::{Error, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -36,19 +36,23 @@ fn get_file_list(opt: &SendOpt) -> Vec<String> {
             files.append(&mut tmp);
         } else if item.exists() && item.is_file() {
             // Append the file
-            files.push(item.to_str().unwrap().to_string());
+            files.push(
+                item.to_str()
+                    .expect("Fatal error converting item to str")
+                    .to_string(),
+            );
         }
     }
 
     files
 }
 
-fn scope_dir(dir: &Path) -> Result<Vec<String>, Error> {
+fn scope_dir(dir: &Path) -> Result<Vec<String>, TeleportError> {
     let path = Path::new(&dir);
     let mut files = Vec::<String>::new();
 
     // Iterate over each item in directory
-    for entry in path.read_dir().unwrap() {
+    for entry in path.read_dir()? {
         if entry.as_ref().unwrap().file_type().unwrap().is_dir() {
             // Skip current directory
             if entry.as_ref().unwrap().path() == *dir {
@@ -273,7 +277,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         }
 
         // Validate response
-        match recv.status.try_into().unwrap() {
+        match recv.status.try_into()? {
             TeleportStatus::NoOverwrite => {
                 println!("The server refused to overwrite the file: {:?}", &filename);
                 continue;
