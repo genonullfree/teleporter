@@ -166,7 +166,7 @@ pub enum TeleportFeatures {
 
 impl TeleportInit {
     pub fn new(features: TeleportFeatures) -> TeleportInit {
-        let version = Version::parse(VERSION).unwrap();
+        let version = Version::parse(VERSION).expect("Fatal version error");
 
         TeleportInit {
             version: [
@@ -283,7 +283,7 @@ impl TryFrom<u8> for TeleportStatus {
 
 impl TeleportInitAck {
     pub fn new(status: TeleportStatus) -> TeleportInitAck {
-        let version = Version::parse(VERSION).unwrap();
+        let version = Version::parse(VERSION).expect("Fatal version error");
 
         TeleportInitAck {
             status: status as u8,
@@ -315,18 +315,21 @@ impl TeleportInitAck {
         }
 
         // Add optional features
-        let feat = self.features.unwrap();
-        out.append(&mut feat.to_le_bytes().to_vec());
+        if let Some(feat) = self.features {
+            out.append(&mut feat.to_le_bytes().to_vec());
 
-        // If no delta, return early
-        if feat & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32
-            || self.delta.is_none()
-        {
-            return Ok(out);
+            // If no delta, return early
+            if feat & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32
+                || self.delta.is_none()
+            {
+                return Ok(out);
+            }
         }
 
         // Add optional TeleportDelta data
-        out.append(&mut self.delta.unwrap().serialize()?);
+        if let Some(delta) = self.delta {
+            out.append(&mut delta.serialize()?);
+        }
 
         Ok(out)
     }
@@ -537,7 +540,7 @@ mod tests {
         t.data.append(&mut TESTDATA.to_vec());
         t.action |= TeleportAction::Encrypted as u8;
         t.iv = Some(*TESTHEADERIV);
-        let s = t.serialize().unwrap();
+        let s = t.serialize().expect("Test should never fail");
         assert_eq!(s, TESTHEADER);
     }
 
@@ -549,7 +552,8 @@ mod tests {
         test.iv = Some(*TESTHEADERIV);
         test.data_len = 17;
         let mut t = TeleportHeader::new(TeleportAction::Init);
-        t.deserialize(TESTHEADER.to_vec()).unwrap();
+        t.deserialize(TESTHEADER.to_vec())
+            .expect("Test should never fail");
         assert_eq!(t, test);
     }
 
@@ -561,8 +565,10 @@ mod tests {
         let priva = crypto::genkey(&mut a);
         let privb = crypto::genkey(&mut b);
 
-        a.deserialize(&b.serialize()).unwrap();
-        b.deserialize(&a.serialize()).unwrap();
+        a.deserialize(&b.serialize())
+            .expect("Test should never fail");
+        b.deserialize(&a.serialize())
+            .expect("Test should never fail");
 
         a.calc_secret(priva);
         b.calc_secret(privb);
@@ -581,8 +587,10 @@ mod tests {
         let priva = crypto::genkey(&mut a);
         let privb = crypto::genkey(&mut b);
 
-        a.deserialize(&b.serialize()).unwrap();
-        b.deserialize(&a.serialize()).unwrap();
+        a.deserialize(&b.serialize())
+            .expect("Test should never fail");
+        b.deserialize(&a.serialize())
+            .expect("Test should never fail");
 
         a.calc_secret(priva);
         b.calc_secret(privb);
@@ -591,8 +599,10 @@ mod tests {
 
         let data = TESTHEADER.to_vec();
         rng.fill(&mut nonce);
-        let ciphertext = a.encrypt(&nonce, &data).unwrap();
-        let plaintext = b.decrypt(&nonce, &ciphertext).unwrap();
+        let ciphertext = a.encrypt(&nonce, &data).expect("Test should never fail");
+        let plaintext = b
+            .decrypt(&nonce, &ciphertext)
+            .expect("Test should never fail");
 
         assert_eq!(plaintext, data);
     }
@@ -606,7 +616,7 @@ mod tests {
         test.chmod = 0o755;
         test.features |= TeleportFeatures::Overwrite as u32;
 
-        let out = test.serialize().unwrap();
+        let out = test.serialize().expect("Test should never fail");
         assert_eq!(out, TESTINIT);
     }
 
@@ -621,7 +631,7 @@ mod tests {
         test.features |= TeleportFeatures::Overwrite as u32;
 
         let mut t = TeleportInit::new(TeleportFeatures::NewFile);
-        t.deserialize(TESTINIT).unwrap();
+        t.deserialize(TESTINIT).expect("Test should never fail");
         t.version = [0, 5, 5];
 
         assert_eq!(test, t);
@@ -635,7 +645,7 @@ mod tests {
         test.chunk_size = 123456789;
         test.chunk_hash = Vec::<u64>::new();
 
-        let out = test.serialize().unwrap();
+        let out = test.serialize().expect("Test should never fail");
 
         assert_eq!(out, TESTDELTA);
     }
@@ -649,7 +659,7 @@ mod tests {
         test.chunk_hash = Vec::<u64>::new();
 
         let mut t = TeleportDelta::new();
-        t.deserialize(TESTDELTA).unwrap();
+        t.deserialize(TESTDELTA).expect("Test should never fail");
 
         assert_eq!(test, t);
     }
@@ -661,7 +671,7 @@ mod tests {
         test.data_len = 5;
         test.data = vec![1, 2, 3, 4, 5];
 
-        let out = test.serialize().unwrap();
+        let out = test.serialize().expect("Test should never fail");
 
         assert_eq!(out, TESTDATAPKT);
     }
@@ -674,7 +684,7 @@ mod tests {
         test.data = vec![1, 2, 3, 4, 5];
 
         let mut t = TeleportData::new();
-        t.deserialize(TESTDATAPKT).unwrap();
+        t.deserialize(TESTDATAPKT).expect("Test should never fail");
 
         assert_eq!(test, t);
     }
@@ -685,7 +695,7 @@ mod tests {
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
         test.version = [0, 6, 0];
-        let out = test.serialize().unwrap();
+        let out = test.serialize().expect("Test should never fail");
 
         assert_eq!(out, TESTINITACK);
     }
@@ -698,7 +708,7 @@ mod tests {
         test.version = [0, 6, 0];
 
         let mut t = TeleportInitAck::new(TeleportStatus::Proceed);
-        t.deserialize(TESTINITACK).unwrap();
+        t.deserialize(TESTINITACK).expect("Test should never fail");
 
         assert_eq!(test, t);
     }

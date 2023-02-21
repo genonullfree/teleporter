@@ -277,7 +277,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         }
 
         // Validate response
-        match recv.status.try_into().unwrap() {
+        match recv.status.try_into()? {
             TeleportStatus::NoOverwrite => {
                 println!("The server refused to overwrite the file: {:?}", &filename);
                 continue;
