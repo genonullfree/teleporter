@@ -1,5 +1,5 @@
+use crate::errors::TeleportError;
 use crate::teleport::TeleportEnc;
-use crate::{Error, ErrorKind};
 use aes_gcm::aead::Aead;
 use aes_gcm::{Aes256Gcm, KeyInit};
 use generic_array::GenericArray;
@@ -13,7 +13,7 @@ pub fn genkey(ctx: &mut TeleportEnc) -> EphemeralSecret {
     secret
 }
 
-pub fn decrypt(key: &[u8; 32], nonce: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, Error> {
+pub fn decrypt(key: &[u8; 32], nonce: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, TeleportError> {
     let key = GenericArray::from_slice(key);
     let cipher = Aes256Gcm::new(key);
     let gen_nonce = GenericArray::from_slice(&nonce);
@@ -25,12 +25,12 @@ pub fn decrypt(key: &[u8; 32], nonce: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>,
     Ok(plaintext.to_vec())
 }
 
-pub fn encrypt(key: &[u8; 32], nonce: Vec<u8>, input: Vec<u8>) -> Result<Vec<u8>, Error> {
+pub fn encrypt(key: &[u8; 32], nonce: Vec<u8>, input: Vec<u8>) -> Result<Vec<u8>, TeleportError> {
     let key = GenericArray::from_slice(key);
     let cipher = Aes256Gcm::new(key);
     let gen_nonce = GenericArray::from_slice(&nonce);
     match cipher.encrypt(gen_nonce, input.as_ref()) {
         Ok(s) => Ok(s),
-        Err(_) => Err(Error::new(ErrorKind::InvalidData, "Encryption failed")),
+        Err(_) => Err(TeleportError::EncryptionFailure),
     }
 }

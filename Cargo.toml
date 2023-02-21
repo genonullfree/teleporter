@@ -1,6 +1,6 @@
 [package]
 name = "teleporter"
-version = "0.10.3"
+version = "0.10.4"
 authors = ["geno nullfree <nullfree.geno@gmail.com>"]
 license = "BSD-3-Clause"
 description = "A small utility to send files quickly from point A to point B"
@@ -13,6 +13,14 @@ edition = "2021"
 rust-version = "1.64.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "teleporter"
+path = "src/lib.rs"
+
+[[bin]]
+name = "teleporter"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.0", features = ["derive"] }
