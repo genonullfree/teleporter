@@ -43,7 +43,7 @@ impl TeleportHeader {
         out.append(&mut self.protocol.to_le_bytes().to_vec());
 
         // Add data length
-        self.data_len = u32::try_from(self.data.len()).unwrap();
+        self.data_len = u32::try_from(self.data.len())?;
         out.append(&mut self.data_len.to_le_bytes().to_vec());
 
         // Add action code
@@ -68,17 +68,17 @@ impl TeleportHeader {
         let mut buf: &[u8] = &input;
 
         // Extract Protocol
-        self.protocol = buf.read_u64::<LittleEndian>().unwrap();
+        self.protocol = buf.read_u64::<LittleEndian>()?;
         if self.protocol != PROTOCOL {
             return Err(TeleportError::InvalidHeaderRead);
         }
 
         // Extract data length
-        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
+        self.data_len = buf.read_u32::<LittleEndian>()?;
         let mut data_ofs = 13;
 
         // Extract action code
-        let action = buf.read_u8().unwrap();
+        let action = buf.read_u8()?;
         self.action = action;
 
         // If Encrypted, extract IV
@@ -200,7 +200,7 @@ impl TeleportInit {
         out.append(&mut self.filesize.to_le_bytes().to_vec());
 
         // Add filename_len
-        let flen = u16::try_from(self.filename.len()).unwrap();
+        let flen = u16::try_from(self.filename.len())?;
         out.append(&mut flen.to_le_bytes().to_vec());
 
         // Add filename
@@ -214,20 +214,20 @@ impl TeleportInit {
 
         // Extract version info
         for i in &mut self.version {
-            *i = buf.read_u16::<LittleEndian>().unwrap();
+            *i = buf.read_u16::<LittleEndian>()?;
         }
 
         // Extract file command feature requests
-        self.features = buf.read_u32::<LittleEndian>().unwrap();
+        self.features = buf.read_u32::<LittleEndian>()?;
 
         // Extract file chmod permissions
-        self.chmod = buf.read_u32::<LittleEndian>().unwrap();
+        self.chmod = buf.read_u32::<LittleEndian>()?;
 
         // Extract file size
-        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
+        self.filesize = buf.read_u64::<LittleEndian>()?;
 
         // Extract filename_len
-        self.filename_len = buf.read_u16::<LittleEndian>().unwrap();
+        self.filename_len = buf.read_u16::<LittleEndian>()?;
 
         // Extract filename
         let fname = &buf[..self.filename_len as usize].to_vec();
@@ -335,11 +335,11 @@ impl TeleportInitAck {
         let mut buf: &[u8] = input;
 
         // Extract status
-        self.status = buf.read_u8().unwrap();
+        self.status = buf.read_u8()?;
 
         // Extract version
         for i in &mut self.version {
-            *i = buf.read_u16::<LittleEndian>().unwrap();
+            *i = buf.read_u16::<LittleEndian>()?;
         }
 
         // If no features, return early
@@ -348,7 +348,7 @@ impl TeleportInitAck {
         }
 
         // Extract optional features
-        let features = buf.read_u32::<LittleEndian>().unwrap();
+        let features = buf.read_u32::<LittleEndian>()?;
         self.features = Some(features);
 
         // If no delta, return early
@@ -408,7 +408,7 @@ impl TeleportDelta {
         out.append(&mut self.chunk_size.to_le_bytes().to_vec());
 
         // Add delta vector length
-        let dlen = u16::try_from(self.chunk_hash.len()).unwrap();
+        let dlen = u16::try_from(self.chunk_hash.len())?;
         out.append(&mut dlen.to_le_bytes().to_vec());
 
         // Add delta vector
@@ -426,7 +426,7 @@ impl TeleportDelta {
         let mut buf = input;
         let mut count: u16 = len;
         while count > 0 {
-            let a: u64 = buf.read_u64::<LittleEndian>().unwrap();
+            let a: u64 = buf.read_u64::<LittleEndian>()?;
             out.push(a);
             count -= 1;
         }
@@ -441,19 +441,19 @@ impl TeleportDelta {
             return Err(TeleportError::InvalidLength);
         }
 
-        self.filesize = buf.read_u64::<LittleEndian>().unwrap();
+        self.filesize = buf.read_u64::<LittleEndian>()?;
 
         // Extract file hash
-        self.hash = buf.read_u64::<LittleEndian>().unwrap();
+        self.hash = buf.read_u64::<LittleEndian>()?;
 
         // Extract chunk size
-        self.chunk_size = buf.read_u32::<LittleEndian>().unwrap();
+        self.chunk_size = buf.read_u32::<LittleEndian>()?;
 
         // Extract delta vector length
-        self.chunk_hash_len = buf.read_u16::<LittleEndian>().unwrap();
+        self.chunk_hash_len = buf.read_u16::<LittleEndian>()?;
 
         // Extract delta vector
-        self.chunk_hash = TeleportDelta::delta_deserial(buf, self.chunk_hash_len).unwrap();
+        self.chunk_hash = TeleportDelta::delta_deserial(buf, self.chunk_hash_len)?;
 
         Ok(())
     }
@@ -482,7 +482,7 @@ impl TeleportData {
         out.append(&mut self.offset.to_le_bytes().to_vec());
 
         // Add data length
-        let length = u32::try_from(self.data.len()).unwrap();
+        let length = u32::try_from(self.data.len())?;
         out.append(&mut length.to_le_bytes().to_vec());
 
         // Add data
@@ -495,10 +495,10 @@ impl TeleportData {
         let mut buf: &[u8] = input;
 
         // Extract offset
-        self.offset = buf.read_u64::<LittleEndian>().unwrap();
+        self.offset = buf.read_u64::<LittleEndian>()?;
 
         // Extract data length
-        self.data_len = buf.read_u32::<LittleEndian>().unwrap();
+        self.data_len = buf.read_u32::<LittleEndian>()?;
 
         // Extract data
         self.data = input[12..].to_vec();
