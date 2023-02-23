@@ -324,11 +324,11 @@ impl TeleportInitAck {
             {
                 return Ok(out);
             }
-        }
 
-        // Add optional TeleportDelta data
-        if let Some(delta) = self.delta {
-            out.append(&mut delta.serialize()?);
+            // Add optional TeleportDelta data
+            if let Some(delta) = self.delta {
+                out.append(&mut delta.serialize()?);
+            }
         }
 
         Ok(out)
