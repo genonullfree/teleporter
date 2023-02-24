@@ -175,6 +175,10 @@ impl TeleportFeatures {
 
         false
     }
+
+    pub fn check_u32(&self, opt: u32) -> bool {
+        opt & *self as u32 == *self as u32
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -341,7 +345,7 @@ impl TeleportInitAck {
         if let Some(feat) = self.features {
             out.append(&mut feat.to_le_bytes().to_vec());
 
-            if feat & (TeleportFeatures::Delta as u32) == TeleportFeatures::Delta as u32 {
+            if TeleportFeatures::Delta.check_u32(feat) {
                 // Add optional TeleportDelta data
                 if let Some(delta) = self.delta {
                     out.append(&mut delta.serialize()?);
@@ -373,7 +377,7 @@ impl TeleportInitAck {
         self.features = Some(features);
 
         // If no delta, return early
-        if features & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32 {
+        if !TeleportFeatures::Delta.check_u32(features) {
             return Ok(());
         }
 

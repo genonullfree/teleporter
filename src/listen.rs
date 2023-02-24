@@ -151,7 +151,7 @@ fn handle_connection(
         filename = filename.replace("../", "");
     }
 
-    if features & TeleportFeatures::Rename as u32 == TeleportFeatures::Rename as u32 {
+    if TeleportFeatures::Rename.check_u32(features) {
         let mut num = 1;
         let mut dest = filename.clone();
         while Path::new(&dest).exists() {
@@ -162,7 +162,7 @@ fn handle_connection(
     }
 
     // Test if overwrite is false and file exists
-    if features & TeleportFeatures::Overwrite as u32 != TeleportFeatures::Overwrite as u32
+    if !TeleportFeatures::Overwrite.check_u32(features)
         && Path::new(&filename).exists()
     {
         println!(" => Refusing to overwrite file: {:?}", &filename);
@@ -192,7 +192,7 @@ fn handle_connection(
     // Open file for writing
     let mut file = match OpenOptions::new().read(true).write(true).open(&filename) {
         Ok(f) => {
-            if features & TeleportFeatures::Backup as u32 == TeleportFeatures::Backup as u32 {
+            if TeleportFeatures::Backup.check_u32(features) {
                 let dest = filename.clone() + ".bak";
                 fs::copy(&filename, &dest)?;
             }
@@ -230,7 +230,7 @@ fn handle_connection(
     file.set_len(header.filesize)?;
     if meta.len() > 0 {
         TeleportFeatures::Overwrite.add(&mut resp.features)?;
-        if features & TeleportFeatures::Delta as u32 == TeleportFeatures::Delta as u32 {
+        if TeleportFeatures::Delta.check_u32(features) {
             TeleportFeatures::Delta.add(&mut resp.features)?;
             resp.delta = match utils::calc_delta_hash(&file) {
                 Ok(d) => Some(d),
