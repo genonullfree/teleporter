@@ -214,22 +214,22 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
 
         // Add delta flag by default
         if !opt.no_delta {
-            features |= TeleportFeatures::Delta as u32;
+            TeleportFeatures::Delta.add_u32(&mut features);
         }
 
         // Add overwrite flag if enabled
         if opt.overwrite {
-            features |= TeleportFeatures::Overwrite as u32;
+            TeleportFeatures::Overwrite.add_u32(&mut features);
         }
 
         // Add backup flag if enabled
         if opt.backup {
-            features |= TeleportFeatures::Backup as u32;
+            TeleportFeatures::Backup.add_u32(&mut features);
         }
 
         // Add rename flag if enabled
         if opt.filename_append {
-            features |= TeleportFeatures::Rename as u32;
+            TeleportFeatures::Rename.add_u32(&mut features);
         }
         header.features = features;
         header.chmod = meta.permissions().mode();

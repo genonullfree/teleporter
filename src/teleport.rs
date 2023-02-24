@@ -166,6 +166,10 @@ impl TeleportFeatures {
         Ok(())
     }
 
+    pub fn add_u32(&self, opt: &mut u32) {
+        *opt |= *self as u32;
+    }
+
     pub fn check(&self, opt: &Option<u32>) -> bool {
         if let Some(o) = opt {
             if o & *self as u32 == *self as u32 {
@@ -636,7 +640,7 @@ mod tests {
         test.filename = vec![b'f', b'i', b'l', b'e'];
         test.filesize = 12345;
         test.chmod = 0o755;
-        test.features |= TeleportFeatures::Overwrite as u32;
+        TeleportFeatures::Overwrite.add_u32(&mut test.features);
 
         let out = test.serialize().expect("Test should never fail");
         assert_eq!(out, TESTINIT);
@@ -650,7 +654,7 @@ mod tests {
         test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
         test.chmod = 0o755;
-        test.features |= TeleportFeatures::Overwrite as u32;
+        TeleportFeatures::Overwrite.add_u32(&mut test.features);
 
         let mut t = TeleportInit::new(TeleportFeatures::NewFile);
         t.deserialize(TESTINIT).expect("Test should never fail");

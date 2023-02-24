@@ -162,9 +162,7 @@ fn handle_connection(
     }
 
     // Test if overwrite is false and file exists
-    if !TeleportFeatures::Overwrite.check_u32(features)
-        && Path::new(&filename).exists()
-    {
+    if !TeleportFeatures::Overwrite.check_u32(features) && Path::new(&filename).exists() {
         println!(" => Refusing to overwrite file: {:?}", &filename);
         let resp = TeleportInitAck::new(TeleportStatus::NoOverwrite);
         return send_ack(resp, &mut stream, &enc);
