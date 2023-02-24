@@ -1,6 +1,6 @@
 use crate::errors::TeleportError;
 use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportStatus};
-use crate::teleport::{TeleportData, TeleportInit, TeleportInitAck};
+use crate::teleport::{TeleportData, TeleportDelta, TeleportInit, TeleportInitAck};
 use crate::ListenOpt;
 use crate::VERSION;
 use crate::{crypto, utils};
@@ -151,7 +151,7 @@ fn handle_connection(
         filename = filename.replace("../", "");
     }
 
-    if features & TeleportFeatures::Rename as u32 == TeleportFeatures::Rename as u32 {
+    if TeleportFeatures::Rename.check_u32(features) {
         let mut num = 1;
         let mut dest = filename.clone();
         while Path::new(&dest).exists() {
@@ -162,9 +162,7 @@ fn handle_connection(
     }
 
     // Test if overwrite is false and file exists
-    if features & TeleportFeatures::Overwrite as u32 != TeleportFeatures::Overwrite as u32
-        && Path::new(&filename).exists()
-    {
+    if !TeleportFeatures::Overwrite.check_u32(features) && Path::new(&filename).exists() {
         println!(" => Refusing to overwrite file: {:?}", &filename);
         let resp = TeleportInitAck::new(TeleportStatus::NoOverwrite);
         return send_ack(resp, &mut stream, &enc);
@@ -192,7 +190,7 @@ fn handle_connection(
     // Open file for writing
     let mut file = match OpenOptions::new().read(true).write(true).open(&filename) {
         Ok(f) => {
-            if features & TeleportFeatures::Backup as u32 == TeleportFeatures::Backup as u32 {
+            if TeleportFeatures::Backup.check_u32(features) {
                 let dest = filename.clone() + ".bak";
                 fs::copy(&filename, &dest)?;
             }
@@ -218,7 +216,7 @@ fn handle_connection(
 
     // Send ready for data ACK
     let mut resp = TeleportInitAck::new(TeleportStatus::Proceed);
-    utils::add_feature(&mut resp.features, TeleportFeatures::NewFile)?;
+    TeleportFeatures::NewFile.add(&mut resp.features)?;
 
     // Add file to list
     let mut recv_data = recv_list.lock().expect("Fatal error locking recv_list");
@@ -229,10 +227,10 @@ fn handle_connection(
     // If overwrite and file exists, build TeleportDelta
     file.set_len(header.filesize)?;
     if meta.len() > 0 {
-        utils::add_feature(&mut resp.features, TeleportFeatures::Overwrite)?;
-        if features & TeleportFeatures::Delta as u32 == TeleportFeatures::Delta as u32 {
-            utils::add_feature(&mut resp.features, TeleportFeatures::Delta)?;
-            resp.delta = match utils::calc_delta_hash(&file) {
+        TeleportFeatures::Overwrite.add(&mut resp.features)?;
+        if TeleportFeatures::Delta.check_u32(features) {
+            TeleportFeatures::Delta.add(&mut resp.features)?;
+            resp.delta = match TeleportDelta::delta_hash(&file) {
                 Ok(d) => Some(d),
                 _ => None,
             };

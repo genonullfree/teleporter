@@ -3,8 +3,11 @@ use crate::errors::TeleportError;
 use crate::{PROTOCOL, VERSION};
 use byteorder::{LittleEndian, ReadBytesExt};
 use semver::Version;
-//use std::io::{Error, ErrorKind};
+use std::fs::File;
+use std::hash::Hasher;
+use std::io::{Read, Seek};
 use x25519_dalek::{EphemeralSecret, PublicKey};
+use xxhash_rust::xxh3;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct TeleportHeader {
@@ -145,6 +148,46 @@ impl TeleportEnc {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TeleportFeatures {
+    NewFile = 0x01,
+    Delta = 0x02,
+    Overwrite = 0x04,
+    Backup = 0x08,
+    Rename = 0x10,
+}
+
+impl TeleportFeatures {
+    pub fn add(&self, opt: &mut Option<u32>) -> Result<(), TeleportError> {
+        if let Some(o) = opt {
+            *o |= *self as u32;
+            *opt = Some(*o);
+        } else {
+            *opt = Some(*self as u32);
+        }
+
+        Ok(())
+    }
+
+    pub fn add_u32(&self, opt: &mut u32) {
+        *opt |= *self as u32;
+    }
+
+    pub fn check(&self, opt: &Option<u32>) -> bool {
+        if let Some(o) = opt {
+            if o & *self as u32 == *self as u32 {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn check_u32(&self, opt: u32) -> bool {
+        opt & *self as u32 == *self as u32
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInit {
     pub version: [u16; 3],
@@ -153,15 +196,6 @@ pub struct TeleportInit {
     pub filesize: u64,
     pub filename_len: u16,
     pub filename: Vec<u8>,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum TeleportFeatures {
-    NewFile = 0x01,
-    Delta = 0x02,
-    Overwrite = 0x04,
-    Backup = 0x08,
-    Rename = 0x10,
 }
 
 impl TeleportInit {
@@ -318,16 +352,11 @@ impl TeleportInitAck {
         if let Some(feat) = self.features {
             out.append(&mut feat.to_le_bytes().to_vec());
 
-            // If no delta, return early
-            if feat & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32
-                || self.delta.is_none()
-            {
-                return Ok(out);
-            }
-
-            // Add optional TeleportDelta data
-            if let Some(delta) = self.delta {
-                out.append(&mut delta.serialize()?);
+            if TeleportFeatures::Delta.check_u32(feat) {
+                // Add optional TeleportDelta data
+                if let Some(delta) = self.delta {
+                    out.append(&mut delta.serialize()?);
+                }
             }
         }
 
@@ -355,7 +384,7 @@ impl TeleportInitAck {
         self.features = Some(features);
 
         // If no delta, return early
-        if features & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32 {
+        if !TeleportFeatures::Delta.check_u32(features) {
             return Ok(());
         }
 
@@ -378,8 +407,8 @@ pub struct TeleportDelta {
 }
 
 impl TeleportDelta {
-    pub fn new() -> TeleportDelta {
-        TeleportDelta {
+    pub fn new() -> Self {
+        Self {
             filesize: 0,
             hash: 0,
             chunk_size: 0,
@@ -459,6 +488,61 @@ impl TeleportDelta {
         self.chunk_hash = TeleportDelta::delta_deserial(buf, self.chunk_hash_len)?;
 
         Ok(())
+    }
+
+    pub fn delta_hash(mut file: &File) -> Result<Self, TeleportError> {
+        let meta = file.metadata()?;
+        let file_size = meta.len();
+
+        file.rewind()?;
+        let mut buf = Vec::<u8>::new();
+        buf.resize(Self::chunk_size(meta.len()), 0);
+        let mut whole_hasher = xxh3::Xxh3::new();
+        let mut chunk_hash = Vec::<u64>::new();
+
+        loop {
+            let mut hasher = xxh3::Xxh3::new();
+            // Read a chunk of the file
+            let len = match file.read(&mut buf) {
+                Ok(l) => l,
+                Err(s) => return Err(TeleportError::Io(s)),
+            };
+            if len == 0 {
+                break;
+            }
+
+            hasher.write(&buf);
+            chunk_hash.push(hasher.finish());
+
+            whole_hasher.write(&buf);
+        }
+
+        let mut out = Self::new();
+        out.filesize = file_size;
+        out.chunk_size = buf.len().try_into()?;
+        out.hash = whole_hasher.finish();
+        out.chunk_hash = chunk_hash;
+
+        file.rewind()?;
+
+        Ok(out)
+    }
+
+    fn chunk_size(file_size: u64) -> usize {
+        let mut chunk = 1024;
+        loop {
+            if file_size / chunk > 2048 {
+                chunk *= 2;
+            } else {
+                break;
+            }
+        }
+
+        if chunk > u32::MAX as u64 {
+            u32::MAX as usize
+        } else {
+            chunk as usize
+        }
     }
 }
 
@@ -614,7 +698,7 @@ mod tests {
         test.filename = vec![b'f', b'i', b'l', b'e'];
         test.filesize = 12345;
         test.chmod = 0o755;
-        test.features |= TeleportFeatures::Overwrite as u32;
+        TeleportFeatures::Overwrite.add_u32(&mut test.features);
 
         let out = test.serialize().expect("Test should never fail");
         assert_eq!(out, TESTINIT);
@@ -628,7 +712,7 @@ mod tests {
         test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
         test.chmod = 0o755;
-        test.features |= TeleportFeatures::Overwrite as u32;
+        TeleportFeatures::Overwrite.add_u32(&mut test.features);
 
         let mut t = TeleportInit::new(TeleportFeatures::NewFile);
         t.deserialize(TESTINIT).expect("Test should never fail");

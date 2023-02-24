@@ -1,21 +1,19 @@
 use crate::errors::TeleportError;
-use crate::teleport;
-use crate::teleport::{
-    TeleportAction, TeleportEnc, TeleportFeatures, TeleportHeader, TeleportInit,
-};
+use crate::teleport::{TeleportAction, TeleportEnc, TeleportHeader, TeleportInit};
 use crate::PROTOCOL;
 use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
-use std::fs::File;
-use std::hash::Hasher;
 use std::io;
-use std::io::{Error, Read, Seek, Write};
+use std::io::{Read, Write};
 use std::net::TcpStream;
-use xxhash_rust::xxh3;
 
-struct SizeUnit {
-    value: f64,
-    unit: char,
+pub fn print_updates(received: f64, header: &TeleportInit) {
+    let units = UpdateUnit::update(received, header.filesize as f64);
+    print!(
+        "\r => {:>8.03}{} of {:>8.03}{} ({:02.02}%)",
+        units.partial.value, units.partial.unit, units.total.value, units.total.unit, units.percent
+    );
+    io::stdout().flush().expect("Fatal IO error");
 }
 
 struct UpdateUnit {
@@ -24,46 +22,46 @@ struct UpdateUnit {
     percent: f64,
 }
 
-pub fn print_updates(received: f64, header: &TeleportInit) {
-    let units = update_units(received, header.filesize as f64);
-    print!(
-        "\r => {:>8.03}{} of {:>8.03}{} ({:02.02}%)",
-        units.partial.value, units.partial.unit, units.total.value, units.total.unit, units.percent
-    );
-    io::stdout().flush().expect("Fatal IO error");
-}
+impl UpdateUnit {
+    pub fn update(partial: f64, total: f64) -> Self {
+        let percent: f64 = (partial / total) * 100f64;
+        let p = SizeUnit::identify(partial);
+        let t = SizeUnit::identify(total);
 
-fn update_units(partial: f64, total: f64) -> UpdateUnit {
-    let percent: f64 = (partial / total) * 100f64;
-    let p = identify_unit(partial);
-    let t = identify_unit(total);
-
-    UpdateUnit {
-        partial: p,
-        total: t,
-        percent,
+        UpdateUnit {
+            partial: p,
+            total: t,
+            percent,
+        }
     }
 }
 
-fn identify_unit(mut value: f64) -> SizeUnit {
-    let unit = ['B', 'K', 'M', 'G', 'T'];
+struct SizeUnit {
+    value: f64,
+    unit: char,
+}
 
-    let mut count = 0;
-    loop {
-        if (value / 1024.0) > 1.0 {
-            count += 1;
-            value /= 1024.0;
-        } else {
-            break;
-        }
-        if count == unit.len() - 1 {
-            break;
-        }
-    }
+impl SizeUnit {
+    pub fn identify(mut value: f64) -> Self {
+        let unit = ['B', 'K', 'M', 'G', 'T'];
 
-    SizeUnit {
-        value,
-        unit: unit[count],
+        let mut count = 0;
+        loop {
+            if (value / 1024.0) > 1.0 {
+                count += 1;
+                value /= 1024.0;
+            } else {
+                break;
+            }
+            if count == unit.len() - 1 {
+                break;
+            }
+        }
+
+        SizeUnit {
+            value,
+            unit: unit[count],
+        }
     }
 }
 
@@ -145,83 +143,6 @@ pub fn recv_packet(
             out.data = ctx.decrypt(&out.iv.expect("Fatal decrypt error"), &out.data)?;
         }
     }
-
-    Ok(out)
-}
-
-fn gen_chunk_size(file_size: u64) -> usize {
-    let mut chunk = 1024;
-    loop {
-        if file_size / chunk > 2048 {
-            chunk *= 2;
-        } else {
-            break;
-        }
-    }
-
-    if chunk > u32::MAX as u64 {
-        u32::MAX as usize
-    } else {
-        chunk as usize
-    }
-}
-
-pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), Error> {
-    if let Some(o) = opt {
-        *o |= add as u32;
-        *opt = Some(*o);
-    } else {
-        *opt = Some(add as u32);
-    }
-
-    Ok(())
-}
-
-pub fn check_feature(opt: &Option<u32>, check: TeleportFeatures) -> bool {
-    if let Some(o) = opt {
-        if o & check as u32 == check as u32 {
-            return true;
-        }
-    }
-
-    false
-}
-
-// Called from server
-pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, TeleportError> {
-    let meta = file.metadata()?;
-    let file_size = meta.len();
-
-    file.rewind()?;
-    let mut buf = Vec::<u8>::new();
-    buf.resize(gen_chunk_size(meta.len()), 0);
-    let mut whole_hasher = xxh3::Xxh3::new();
-    let mut chunk_hash = Vec::<u64>::new();
-
-    loop {
-        let mut hasher = xxh3::Xxh3::new();
-        // Read a chunk of the file
-        let len = match file.read(&mut buf) {
-            Ok(l) => l,
-            Err(s) => return Err(TeleportError::Io(s)),
-        };
-        if len == 0 {
-            break;
-        }
-
-        hasher.write(&buf);
-        chunk_hash.push(hasher.finish());
-
-        whole_hasher.write(&buf);
-    }
-
-    let mut out = teleport::TeleportDelta::new();
-    out.filesize = file_size;
-    out.chunk_size = buf.len().try_into()?;
-    out.hash = whole_hasher.finish();
-    out.chunk_hash = chunk_hash;
-
-    file.rewind()?;
 
     Ok(out)
 }
