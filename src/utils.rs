@@ -13,9 +13,13 @@ use std::io::{Error, Read, Seek, Write};
 use std::net::TcpStream;
 use xxhash_rust::xxh3;
 
-struct SizeUnit {
-    value: f64,
-    unit: char,
+pub fn print_updates(received: f64, header: &TeleportInit) {
+    let units = UpdateUnit::update(received, header.filesize as f64);
+    print!(
+        "\r => {:>8.03}{} of {:>8.03}{} ({:02.02}%)",
+        units.partial.value, units.partial.unit, units.total.value, units.total.unit, units.percent
+    );
+    io::stdout().flush().expect("Fatal IO error");
 }
 
 struct UpdateUnit {
@@ -24,46 +28,46 @@ struct UpdateUnit {
     percent: f64,
 }
 
-pub fn print_updates(received: f64, header: &TeleportInit) {
-    let units = update_units(received, header.filesize as f64);
-    print!(
-        "\r => {:>8.03}{} of {:>8.03}{} ({:02.02}%)",
-        units.partial.value, units.partial.unit, units.total.value, units.total.unit, units.percent
-    );
-    io::stdout().flush().expect("Fatal IO error");
-}
+impl UpdateUnit {
+    pub fn update(partial: f64, total: f64) -> Self {
+        let percent: f64 = (partial / total) * 100f64;
+        let p = SizeUnit::identify(partial);
+        let t = SizeUnit::identify(total);
 
-fn update_units(partial: f64, total: f64) -> UpdateUnit {
-    let percent: f64 = (partial / total) * 100f64;
-    let p = identify_unit(partial);
-    let t = identify_unit(total);
-
-    UpdateUnit {
-        partial: p,
-        total: t,
-        percent,
+        UpdateUnit {
+            partial: p,
+            total: t,
+            percent,
+        }
     }
 }
 
-fn identify_unit(mut value: f64) -> SizeUnit {
-    let unit = ['B', 'K', 'M', 'G', 'T'];
+struct SizeUnit {
+    value: f64,
+    unit: char,
+}
 
-    let mut count = 0;
-    loop {
-        if (value / 1024.0) > 1.0 {
-            count += 1;
-            value /= 1024.0;
-        } else {
-            break;
-        }
-        if count == unit.len() - 1 {
-            break;
-        }
-    }
+impl SizeUnit {
+    pub fn identify(mut value: f64) -> Self {
+        let unit = ['B', 'K', 'M', 'G', 'T'];
 
-    SizeUnit {
-        value,
-        unit: unit[count],
+        let mut count = 0;
+        loop {
+            if (value / 1024.0) > 1.0 {
+                count += 1;
+                value /= 1024.0;
+            } else {
+                break;
+            }
+            if count == unit.len() - 1 {
+                break;
+            }
+        }
+
+        SizeUnit {
+            value,
+            unit: unit[count],
+        }
     }
 }
 
