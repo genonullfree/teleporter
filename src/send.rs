@@ -192,7 +192,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         // Skip if opt.no_delta present, otherwise calculate the delta hash of the file
         let handle = match opt.overwrite && !opt.no_delta {
             true => Some(thread::spawn(move || {
-                utils::calc_delta_hash(&thread_file).unwrap()
+                TeleportDelta::delta_hash(&thread_file).unwrap()
             })),
             false => None,
         };

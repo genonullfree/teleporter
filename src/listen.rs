@@ -1,6 +1,6 @@
 use crate::errors::TeleportError;
 use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportStatus};
-use crate::teleport::{TeleportData, TeleportInit, TeleportInitAck};
+use crate::teleport::{TeleportData, TeleportDelta, TeleportInit, TeleportInitAck};
 use crate::ListenOpt;
 use crate::VERSION;
 use crate::{crypto, utils};
@@ -230,7 +230,7 @@ fn handle_connection(
         TeleportFeatures::Overwrite.add(&mut resp.features)?;
         if TeleportFeatures::Delta.check_u32(features) {
             TeleportFeatures::Delta.add(&mut resp.features)?;
-            resp.delta = match utils::calc_delta_hash(&file) {
+            resp.delta = match TeleportDelta::delta_hash(&file) {
                 Ok(d) => Some(d),
                 _ => None,
             };

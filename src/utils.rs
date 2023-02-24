@@ -1,15 +1,11 @@
 use crate::errors::TeleportError;
-use crate::teleport;
 use crate::teleport::{TeleportAction, TeleportEnc, TeleportHeader, TeleportInit};
 use crate::PROTOCOL;
 use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
-use std::fs::File;
-use std::hash::Hasher;
 use std::io;
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Write};
 use std::net::TcpStream;
-use xxhash_rust::xxh3;
 
 pub fn print_updates(received: f64, header: &TeleportInit) {
     let units = UpdateUnit::update(received, header.filesize as f64);
@@ -147,62 +143,6 @@ pub fn recv_packet(
             out.data = ctx.decrypt(&out.iv.expect("Fatal decrypt error"), &out.data)?;
         }
     }
-
-    Ok(out)
-}
-
-fn gen_chunk_size(file_size: u64) -> usize {
-    let mut chunk = 1024;
-    loop {
-        if file_size / chunk > 2048 {
-            chunk *= 2;
-        } else {
-            break;
-        }
-    }
-
-    if chunk > u32::MAX as u64 {
-        u32::MAX as usize
-    } else {
-        chunk as usize
-    }
-}
-
-// Called from server
-pub fn calc_delta_hash(mut file: &File) -> Result<teleport::TeleportDelta, TeleportError> {
-    let meta = file.metadata()?;
-    let file_size = meta.len();
-
-    file.rewind()?;
-    let mut buf = Vec::<u8>::new();
-    buf.resize(gen_chunk_size(meta.len()), 0);
-    let mut whole_hasher = xxh3::Xxh3::new();
-    let mut chunk_hash = Vec::<u64>::new();
-
-    loop {
-        let mut hasher = xxh3::Xxh3::new();
-        // Read a chunk of the file
-        let len = match file.read(&mut buf) {
-            Ok(l) => l,
-            Err(s) => return Err(TeleportError::Io(s)),
-        };
-        if len == 0 {
-            break;
-        }
-
-        hasher.write(&buf);
-        chunk_hash.push(hasher.finish());
-
-        whole_hasher.write(&buf);
-    }
-
-    let mut out = teleport::TeleportDelta::new();
-    out.filesize = file_size;
-    out.chunk_size = buf.len().try_into()?;
-    out.hash = whole_hasher.finish();
-    out.chunk_hash = chunk_hash;
-
-    file.rewind()?;
 
     Ok(out)
 }
