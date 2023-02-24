@@ -154,25 +154,27 @@ pub enum TeleportFeatures {
     Rename = 0x10,
 }
 
-pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), TeleportError> {
-    if let Some(o) = opt {
-        *o |= add as u32;
-        *opt = Some(*o);
-    } else {
-        *opt = Some(add as u32);
-    }
-
-    Ok(())
-}
-
-pub fn check_feature(opt: &Option<u32>, check: TeleportFeatures) -> bool {
-    if let Some(o) = opt {
-        if o & check as u32 == check as u32 {
-            return true;
+impl TeleportFeatures {
+    pub fn add(&self, opt: &mut Option<u32>) -> Result<(), TeleportError> {
+        if let Some(o) = opt {
+            *o |= *self as u32;
+            *opt = Some(*o);
+        } else {
+            *opt = Some(*self as u32);
         }
+
+        Ok(())
     }
 
-    false
+    pub fn check(&self, opt: &Option<u32>) -> bool {
+        if let Some(o) = opt {
+            if o & *self as u32 == *self as u32 {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
