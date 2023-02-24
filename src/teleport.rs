@@ -318,16 +318,11 @@ impl TeleportInitAck {
         if let Some(feat) = self.features {
             out.append(&mut feat.to_le_bytes().to_vec());
 
-            // If no delta, return early
-            if feat & (TeleportFeatures::Delta as u32) != TeleportFeatures::Delta as u32
-                || self.delta.is_none()
-            {
-                return Ok(out);
-            }
-
-            // Add optional TeleportDelta data
-            if let Some(delta) = self.delta {
-                out.append(&mut delta.serialize()?);
+            if feat & (TeleportFeatures::Delta as u32) == TeleportFeatures::Delta as u32 {
+                // Add optional TeleportDelta data
+                if let Some(delta) = self.delta {
+                    out.append(&mut delta.serialize()?);
+                }
             }
         }
 
