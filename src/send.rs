@@ -1,4 +1,5 @@
 use crate::errors::TeleportError;
+use crate::teleport;
 use crate::teleport::{TeleportAction, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportData, TeleportDelta, TeleportEnc, TeleportInit, TeleportInitAck};
 use crate::SendOpt;
@@ -317,7 +318,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         // If TeleportDelta was received, else None
         let csum_recv = recv.delta.as_ref().map(|r| r.hash);
         let mut file_delta: Option<TeleportDelta> = None;
-        if utils::check_feature(&recv.features, TeleportFeatures::Overwrite) {
+        if teleport::check_feature(&recv.features, TeleportFeatures::Overwrite) {
             file_delta = handle.map(|s| s.join().expect("calc_file_hash panicked"));
         }
 

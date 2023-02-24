@@ -145,6 +145,36 @@ impl TeleportEnc {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TeleportFeatures {
+    NewFile = 0x01,
+    Delta = 0x02,
+    Overwrite = 0x04,
+    Backup = 0x08,
+    Rename = 0x10,
+}
+
+pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), TeleportError> {
+    if let Some(o) = opt {
+        *o |= add as u32;
+        *opt = Some(*o);
+    } else {
+        *opt = Some(add as u32);
+    }
+
+    Ok(())
+}
+
+pub fn check_feature(opt: &Option<u32>, check: TeleportFeatures) -> bool {
+    if let Some(o) = opt {
+        if o & check as u32 == check as u32 {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInit {
     pub version: [u16; 3],
@@ -153,15 +183,6 @@ pub struct TeleportInit {
     pub filesize: u64,
     pub filename_len: u16,
     pub filename: Vec<u8>,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum TeleportFeatures {
-    NewFile = 0x01,
-    Delta = 0x02,
-    Overwrite = 0x04,
-    Backup = 0x08,
-    Rename = 0x10,
 }
 
 impl TeleportInit {

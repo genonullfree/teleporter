@@ -1,4 +1,5 @@
 use crate::errors::TeleportError;
+use crate::teleport;
 use crate::teleport::{TeleportAction, TeleportEnc, TeleportFeatures, TeleportStatus};
 use crate::teleport::{TeleportData, TeleportInit, TeleportInitAck};
 use crate::ListenOpt;
@@ -218,7 +219,7 @@ fn handle_connection(
 
     // Send ready for data ACK
     let mut resp = TeleportInitAck::new(TeleportStatus::Proceed);
-    utils::add_feature(&mut resp.features, TeleportFeatures::NewFile)?;
+    teleport::add_feature(&mut resp.features, TeleportFeatures::NewFile)?;
 
     // Add file to list
     let mut recv_data = recv_list.lock().expect("Fatal error locking recv_list");
@@ -229,9 +230,9 @@ fn handle_connection(
     // If overwrite and file exists, build TeleportDelta
     file.set_len(header.filesize)?;
     if meta.len() > 0 {
-        utils::add_feature(&mut resp.features, TeleportFeatures::Overwrite)?;
+        teleport::add_feature(&mut resp.features, TeleportFeatures::Overwrite)?;
         if features & TeleportFeatures::Delta as u32 == TeleportFeatures::Delta as u32 {
-            utils::add_feature(&mut resp.features, TeleportFeatures::Delta)?;
+            teleport::add_feature(&mut resp.features, TeleportFeatures::Delta)?;
             resp.delta = match utils::calc_delta_hash(&file) {
                 Ok(d) => Some(d),
                 _ => None,

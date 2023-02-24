@@ -1,15 +1,13 @@
 use crate::errors::TeleportError;
 use crate::teleport;
-use crate::teleport::{
-    TeleportAction, TeleportEnc, TeleportFeatures, TeleportHeader, TeleportInit,
-};
+use crate::teleport::{TeleportAction, TeleportEnc, TeleportHeader, TeleportInit};
 use crate::PROTOCOL;
 use byteorder::{LittleEndian, ReadBytesExt};
 use rand::prelude::*;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io;
-use std::io::{Error, Read, Seek, Write};
+use std::io::{Read, Seek, Write};
 use std::net::TcpStream;
 use xxhash_rust::xxh3;
 
@@ -168,27 +166,6 @@ fn gen_chunk_size(file_size: u64) -> usize {
     } else {
         chunk as usize
     }
-}
-
-pub fn add_feature(opt: &mut Option<u32>, add: TeleportFeatures) -> Result<(), Error> {
-    if let Some(o) = opt {
-        *o |= add as u32;
-        *opt = Some(*o);
-    } else {
-        *opt = Some(add as u32);
-    }
-
-    Ok(())
-}
-
-pub fn check_feature(opt: &Option<u32>, check: TeleportFeatures) -> bool {
-    if let Some(o) = opt {
-        if o & check as u32 == check as u32 {
-            return true;
-        }
-    }
-
-    false
 }
 
 // Called from server
