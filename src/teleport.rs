@@ -24,6 +24,8 @@ pub enum TeleportAction {
     InitAck = 0x02,
     Ecdh = 0x04,
     EcdhAck = 0x08,
+    Scan = 0x10,
+    ScanAck = 0x20,
     Data = 0x40,
     Encrypted = 0x80,
 }
