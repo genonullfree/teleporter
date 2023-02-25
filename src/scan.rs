@@ -1,6 +1,9 @@
 use crate::errors::TeleportError;
-use pnet_datalink::interfaces;
 use ipnetwork::IpNetwork;
+use pnet_datalink::interfaces;
+use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
+
 use crate::ScanOpt;
 
 pub fn run(opt: ScanOpt) -> Result<(), TeleportError> {
@@ -14,11 +17,19 @@ pub fn run(opt: ScanOpt) -> Result<(), TeleportError> {
             }
             for v in &i.ips {
                 if v.is_ipv4() {
-                    println!("{:?}", i.ips);
+                    scan_network(&v, opt.port);
                 }
             }
         }
     }
 
     Ok(())
+}
+
+fn scan_network(network: &IpNetwork, port: u16) {
+    for i in network.iter() {
+        let sa = format!("{}:{port}", i);
+        let socket = sa.to_socket_addrs().unwrap();
+        println!("{socket:?}");
+    }
 }

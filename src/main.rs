@@ -1,7 +1,7 @@
 use clap::Parser;
 
-use teleporter::{listen, send, scan};
-use teleporter::{ListenOpt, SendOpt, ScanOpt};
+use teleporter::{listen, scan, send};
+use teleporter::{ListenOpt, ScanOpt, SendOpt};
 
 /// Teleporter is a simple application for sending files from Point A to Point B
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 pub mod errors;
 pub mod listen;
-pub mod send;
 pub mod scan;
+pub mod send;
 
 mod crypto;
 mod teleport;
