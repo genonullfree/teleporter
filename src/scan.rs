@@ -1,8 +1,12 @@
 use crate::errors::TeleportError;
+use crate::teleport::{TeleportAction, TeleportFeatures, TeleportInit};
+use crate::utils;
 use ipnetwork::IpNetwork;
 use pnet_datalink::interfaces;
 use std::net::SocketAddr;
+use std::net::TcpStream;
 use std::net::ToSocketAddrs;
+use std::time::Duration;
 
 use crate::ScanOpt;
 
@@ -17,7 +21,7 @@ pub fn run(opt: ScanOpt) -> Result<(), TeleportError> {
             }
             for v in &i.ips {
                 if v.is_ipv4() {
-                    scan_network(&v, opt.port);
+                    scan_network(v, opt.port)?;
                 }
             }
         }
@@ -26,10 +30,34 @@ pub fn run(opt: ScanOpt) -> Result<(), TeleportError> {
     Ok(())
 }
 
-fn scan_network(network: &IpNetwork, port: u16) {
-    for i in network.iter() {
+fn scan_network(network: &IpNetwork, port: u16) -> Result<(), TeleportError> {
+    for i in network.iter().skip(1) {
         let sa = format!("{}:{port}", i);
         let socket = sa.to_socket_addrs().unwrap();
-        println!("{socket:?}");
+        for s in socket {
+            if let Ok(_) = ping(&s) {
+                println!("Teleporter detected on {sa}");
+            };
+        }
     }
+
+    Ok(())
+}
+
+fn ping(ip_addr: &SocketAddr) -> Result<(), TeleportError> {
+    let stream = TcpStream::connect_timeout(ip_addr, Duration::new(0, 50000))?;
+    query(stream)
+}
+
+fn query(mut stream: TcpStream) -> Result<(), TeleportError> {
+    let header = TeleportInit::new(TeleportFeatures::Ping);
+
+    utils::send_packet(
+        &mut stream,
+        TeleportAction::Ping,
+        &None,
+        header.serialize()?,
+    )?;
+
+    Ok(())
 }

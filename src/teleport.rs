@@ -24,8 +24,8 @@ pub enum TeleportAction {
     InitAck = 0x02,
     Ecdh = 0x04,
     EcdhAck = 0x08,
-    Scan = 0x10,
-    ScanAck = 0x20,
+    Ping = 0x10,
+    PingAck = 0x20,
     Data = 0x40,
     Encrypted = 0x80,
 }
@@ -157,6 +157,7 @@ pub enum TeleportFeatures {
     Overwrite = 0x04,
     Backup = 0x08,
     Rename = 0x10,
+    Ping = 0x20,
 }
 
 impl TeleportFeatures {
