@@ -47,7 +47,7 @@ fn scan_network(network: &IpNetwork, port: u16) -> Result<(), TeleportError> {
 }
 
 fn ping(ip_addr: &SocketAddr) -> Result<TeleportInitAck, TeleportError> {
-    let stream = TcpStream::connect_timeout(ip_addr, Duration::new(0, 50000))?;
+    let stream = TcpStream::connect_timeout(ip_addr, Duration::new(0, 5000000))?;
     query(stream)
 }
 
