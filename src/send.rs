@@ -272,7 +272,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         if num == 0 {
             println!(
                 "Server {}.{}.{}",
-                recv.version[0], recv.version[1], recv.version[2]
+                recv.version.major, recv.version.minor, recv.version.patch
             );
         }
 
