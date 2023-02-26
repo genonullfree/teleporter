@@ -216,7 +216,7 @@ impl TeleportVersion {
     }
 
     pub fn to_string(&self) -> String {
-        format!("{}.{}.{}", self.major, self.minor, self.patch).to_owned()
+        format!("{}.{}.{}", self.major, self.minor, self.patch)
     }
 
     pub fn is_compatible(&self, version: &Version) -> bool {

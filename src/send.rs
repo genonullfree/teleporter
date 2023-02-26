@@ -270,7 +270,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         recv.deserialize(&packet.data)?;
 
         if num == 0 {
-            println!("Server {}", recv.version.to_string(),);
+            println!("Server {}", recv.version.to_string());
         }
 
         // Validate response
