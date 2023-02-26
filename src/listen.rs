@@ -105,7 +105,16 @@ fn handle_connection(
     // Receive header first
     let mut packet = utils::recv_packet(&mut stream, &None)?;
     if packet.action == TeleportAction::Ping as u8 {
-        println!("{:?}", packet);
+        let mut ping = TeleportInit::default();
+        ping.deserialize(&mut packet.data)?;
+        if !TeleportFeatures::Ping.check_u32(ping.features) {
+            return Ok(());
+        }
+        println!(
+            "\rPing received from Teleporter v{} at {}",
+            ping.version.to_string(),
+            ip
+        );
         let pong = TeleportInitAck::new(TeleportStatus::Pong);
         return utils::send_packet(
             &mut stream,
@@ -138,9 +147,7 @@ fn handle_connection(
     let features: u32 = header.features;
 
     let version = Version::parse(VERSION).expect("Fatal version error");
-    let compatible = {
-        version.major as u16 == header.version.major && version.minor as u16 == header.version.minor
-    };
+    let compatible = header.version.is_compatible(&version);
 
     if !compatible {
         println!(

@@ -270,10 +270,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         recv.deserialize(&packet.data)?;
 
         if num == 0 {
-            println!(
-                "Server {}.{}.{}",
-                recv.version.major, recv.version.minor, recv.version.patch
-            );
+            println!("Server {}", recv.version.to_string(),);
         }
 
         // Validate response
@@ -298,8 +295,9 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
             }
             TeleportStatus::WrongVersion => {
                 println!(
-                    "Version mismatch! Server: {:?} Us: {}",
-                    recv.version, VERSION
+                    "Version mismatch! Server: {} Us: {}",
+                    recv.version.to_string(),
+                    VERSION
                 );
                 break;
             }

@@ -214,9 +214,17 @@ impl TeleportVersion {
         self.patch = buf.read_u16::<LittleEndian>()?;
         Ok(())
     }
+
+    pub fn to_string(&self) -> String {
+        format!("{}.{}.{}", self.major, self.minor, self.patch).to_owned()
+    }
+
+    pub fn is_compatible(&self, version: &Version) -> bool {
+        version.major == self.major as u64 && version.minor == self.minor as u64
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInit {
     pub version: TeleportVersion,
     pub features: u32,

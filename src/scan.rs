@@ -38,8 +38,7 @@ fn scan_network(network: &IpNetwork, port: u16) -> Result<(), TeleportError> {
         let socket = sa.to_socket_addrs().unwrap();
         for s in socket {
             if let Ok(ack) = ping(&s) {
-                println!("Teleporter detected on {sa}");
-                println!("{:?}", ack);
+                println!("Teleporter v{} detected on {sa}", ack.version.to_string());
             };
         }
     }
