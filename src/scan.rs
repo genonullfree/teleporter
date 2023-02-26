@@ -1,5 +1,7 @@
 use crate::errors::TeleportError;
-use crate::teleport::{TeleportAction, TeleportFeatures, TeleportInit};
+use crate::teleport::{
+    TeleportAction, TeleportFeatures, TeleportInit, TeleportInitAck, TeleportStatus,
+};
 use crate::utils;
 use ipnetwork::IpNetwork;
 use pnet_datalink::interfaces;
@@ -35,8 +37,9 @@ fn scan_network(network: &IpNetwork, port: u16) -> Result<(), TeleportError> {
         let sa = format!("{}:{port}", i);
         let socket = sa.to_socket_addrs().unwrap();
         for s in socket {
-            if let Ok(_) = ping(&s) {
+            if let Ok(ack) = ping(&s) {
                 println!("Teleporter detected on {sa}");
+                println!("{:?}", ack);
             };
         }
     }
@@ -44,12 +47,12 @@ fn scan_network(network: &IpNetwork, port: u16) -> Result<(), TeleportError> {
     Ok(())
 }
 
-fn ping(ip_addr: &SocketAddr) -> Result<(), TeleportError> {
+fn ping(ip_addr: &SocketAddr) -> Result<TeleportInitAck, TeleportError> {
     let stream = TcpStream::connect_timeout(ip_addr, Duration::new(0, 50000))?;
     query(stream)
 }
 
-fn query(mut stream: TcpStream) -> Result<(), TeleportError> {
+fn query(mut stream: TcpStream) -> Result<TeleportInitAck, TeleportError> {
     let header = TeleportInit::new(TeleportFeatures::Ping);
 
     utils::send_packet(
@@ -59,5 +62,12 @@ fn query(mut stream: TcpStream) -> Result<(), TeleportError> {
         header.serialize()?,
     )?;
 
-    Ok(())
+    let packet = utils::recv_packet(&mut stream, &None)?;
+    let mut ack = TeleportInitAck::default();
+    ack.deserialize(&packet.data)?;
+    if ack.status != TeleportStatus::Pong as u8 {
+        Err(TeleportError::InvalidStatusCode)
+    } else {
+        Ok(ack)
+    }
 }

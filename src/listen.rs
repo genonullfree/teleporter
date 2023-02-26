@@ -104,7 +104,16 @@ fn handle_connection(
 
     // Receive header first
     let mut packet = utils::recv_packet(&mut stream, &None)?;
-    if packet.action == TeleportAction::Ecdh as u8 {
+    if packet.action == TeleportAction::Ping as u8 {
+        println!("{:?}", packet);
+        let pong = TeleportInitAck::new(TeleportStatus::Pong);
+        return utils::send_packet(
+            &mut stream,
+            TeleportAction::PingAck,
+            &None,
+            pong.serialize()?,
+        );
+    } else if packet.action == TeleportAction::Ecdh as u8 {
         let mut ctx = TeleportEnc::new();
         let privkey = crypto::genkey(&mut ctx);
         ctx.deserialize(&packet.data)?;
@@ -129,8 +138,9 @@ fn handle_connection(
     let features: u32 = header.features;
 
     let version = Version::parse(VERSION).expect("Fatal version error");
-    let compatible =
-        { version.major as u16 == header.version[0] && version.minor as u16 == header.version[1] };
+    let compatible = {
+        version.major as u16 == header.version.major && version.minor as u16 == header.version.minor
+    };
 
     if !compatible {
         println!(
