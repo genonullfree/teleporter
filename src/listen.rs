@@ -25,7 +25,7 @@ pub fn run(opt: ListenOpt) -> Result<(), TeleportError> {
             Ok(l) => l,
             Err(s) => {
                 println!(
-                    "Cannot bind to port: {:?}. Is Teleporter already running?",
+                    "Cannot bind to port: {}. Is Teleporter already running?",
                     &opt.port
                 );
                 return Err(TeleportError::Io(s));
@@ -150,7 +150,7 @@ fn handle_connection(
 
     if !compatible {
         println!(
-            "Error: Version mismatch from: {:?}! Us:{} Client:{:?}",
+            "Error: Version mismatch from: {:?}! Us:{} Client:{}",
             ip, VERSION, header.version
         );
         let resp = TeleportInitAck::new(TeleportStatus::WrongVersion);
@@ -179,7 +179,7 @@ fn handle_connection(
 
     // Test if overwrite is false and file exists
     if !TeleportFeatures::Overwrite.check_u32(features) && Path::new(&filename).exists() {
-        println!(" => Refusing to overwrite file: {:?}", &filename);
+        println!(" => Refusing to overwrite file: {}", &filename);
         let resp = TeleportInitAck::new(TeleportStatus::NoOverwrite);
         return send_ack(resp, &mut stream, &enc);
     }
@@ -189,7 +189,7 @@ fn handle_connection(
         Some(p) => p,
         None => {
             println!(
-                "Error: unable to parse the path and filename: {:?}",
+                "Error: unable to parse the path and filename: {}",
                 &filename
             );
             let resp = TeleportInitAck::new(TeleportStatus::BadFileName);
@@ -198,7 +198,7 @@ fn handle_connection(
     };
 
     if fs::create_dir_all(path).is_err() {
-        println!("Error: unable to create directories: {:?}", &path);
+        println!("Error: unable to create directories: {}", &path.display());
         let resp = TeleportInitAck::new(TeleportStatus::NoPermission);
         return send_ack(resp, &mut stream, &enc);
     };
@@ -215,7 +215,7 @@ fn handle_connection(
         Err(_) => match File::create(&filename) {
             Ok(f) => f,
             Err(_) => {
-                println!("Error: unable to create file: {:?}", &filename);
+                println!("Error: unable to create file: {}", &filename);
                 let resp = TeleportInitAck::new(TeleportStatus::NoPermission);
                 return send_ack(resp, &mut stream, &enc);
             }
@@ -290,11 +290,11 @@ fn handle_connection(
                 let speed =
                     (header.filesize as f64 * 8.0) / duration.as_secs() as f64 / 1024.0 / 1024.0;
                 println!(
-                    " => Received file: {:?} (from: {:?} v{:?}) ({:.2?} @ {:.3} Mbps)",
+                    " => Received file: {} (from: {} v{}) ({:.2?} @ {:.3} Mbps)",
                     &filename, ip, &header.version, duration, speed
                 );
             } else {
-                println!(" => Error receiving: {:?}", &filename);
+                println!(" => Error receiving: {}", &filename);
             }
             break;
         }
@@ -307,7 +307,7 @@ fn handle_connection(
 
         if chunk.data_len as usize != wrote {
             println!(
-                "Error writing to file: {:?} (read: {}, wrote: {}). Out of space?",
+                "Error writing to file: {} (read: {}, wrote: {}). Out of space?",
                 &filename, chunk.data_len, wrote
             );
             break;
