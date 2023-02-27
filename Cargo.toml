@@ -1,6 +1,6 @@
 [package]
 name = "teleporter"
-version = "0.10.7"
+version = "0.10.8"
 authors = ["geno nullfree <nullfree.geno@gmail.com>"]
 license = "BSD-3-Clause"
 description = "A small utility to send files quickly from point A to point B"

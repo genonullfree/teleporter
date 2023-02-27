@@ -276,19 +276,19 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         // Validate response
         match recv.status.try_into()? {
             TeleportStatus::NoOverwrite => {
-                println!("The server refused to overwrite the file: {:?}", &filename);
+                println!("The server refused to overwrite the file: {}", &filename);
                 continue;
             }
             TeleportStatus::NoPermission => {
                 println!(
-                    "The server does not have permission to write to this file: {:?}",
+                    "The server does not have permission to write to this file: {}",
                     &filename
                 );
                 continue;
             }
             TeleportStatus::NoSpace => {
                 println!(
-                    "The server has no space available to write the file: {:?}",
+                    "The server has no space available to write the file: {}",
                     &filename
                 );
                 continue;
