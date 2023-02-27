@@ -270,10 +270,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
         recv.deserialize(&packet.data)?;
 
         if num == 0 {
-            println!(
-                "Server {}.{}.{}",
-                recv.version[0], recv.version[1], recv.version[2]
-            );
+            println!("Server {}", recv.version);
         }
 
         // Validate response
@@ -297,10 +294,7 @@ pub fn run(mut opt: SendOpt) -> Result<(), TeleportError> {
                 continue;
             }
             TeleportStatus::WrongVersion => {
-                println!(
-                    "Version mismatch! Server: {:?} Us: {}",
-                    recv.version, VERSION
-                );
+                println!("Version mismatch! Server: {} Us: {}", recv.version, VERSION);
                 break;
             }
             TeleportStatus::RequiresEncryption => {

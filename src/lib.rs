@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 pub mod errors;
 pub mod listen;
+pub mod scan;
 pub mod send;
 
 mod crypto;
@@ -66,6 +67,13 @@ pub struct ListenOpt {
     must_encrypt: bool,
 
     /// Port to listen on
+    #[arg(short, long, default_value = "9001")]
+    port: u16,
+}
+
+#[derive(Clone, Debug, Parser, PartialEq, Eq)]
+pub struct ScanOpt {
+    /// Port to scan for
     #[arg(short, long, default_value = "9001")]
     port: u16,
 }

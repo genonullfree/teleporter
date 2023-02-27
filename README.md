@@ -61,6 +61,26 @@ Options:
 
 Teleporter will transfer files with their name information as well as their file permissions. Any file path information will be lost unless the `-k` option is enabled. All the received files will be written out in the CWD where the server side was started unless the server was started with the `--allow-dangerous-filepath` option. When overwriting a file with the `-o` option, additional modifiers can be used, such as `-b` to make a backup of the original file, or `-n` to disable delta file transfers and always overwrite the entire file. 
 
+## Scan for Teleporter Instances
+
+To have teleporter scan the local network for any reachable teleporter instances, run:
+
+```
+teleporter scan
+```
+This will iterate through all the network devices (except the loopback device!) and will attempt to locate any teleporter servers listening on a specific port. It will report back if any server is found and what version they are running. This feature is only available on teleporter v0.10.7 and higher.
+
+Here are the additional arguments for scanning:
+```
+Scan all network devices for any reachable Teleport listeners
+
+Usage: teleporter scan [OPTIONS]
+
+Options:
+  -p, --port <PORT>  Port to scan for [default: 9001]
+  -h, --help         Print help
+```
+
 ## Rename / Copy-To
 
 Teleporter can now set remote file locations, or file renaming, via the `:` operator. Similar to how `Docker` allows quick mounting of directory locations, Teleporter will first attempt to open a file by the full given path, if that file does not exist, it will see if there are any colons (`:`) in the filename. If present, it will split the filepath and attempt to open on the first portion of the name. If that succeeds, Teleporter assumes this is a file rename / copy-to. Teleporter will also need the `-k` option, to keep filepath information. Otherwise only the file name will be changed.

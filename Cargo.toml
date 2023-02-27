@@ -1,6 +1,6 @@
 [package]
 name = "teleporter"
-version = "0.10.6"
+version = "0.10.7"
 authors = ["geno nullfree <nullfree.geno@gmail.com>"]
 license = "BSD-3-Clause"
 description = "A small utility to send files quickly from point A to point B"
@@ -32,6 +32,9 @@ x25519-dalek = "1.2"
 semver = "1.0"
 rand = "0.7"
 thiserror = "1.0"
+pnet = "0.33.0"
+pnet_datalink = "0.33.0"
+ipnetwork = "0.20.0"
 
 [profile.size]
 inherits = "release"

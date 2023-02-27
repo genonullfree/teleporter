@@ -1,7 +1,7 @@
 use clap::Parser;
 
-use teleporter::{listen, send};
-use teleporter::{ListenOpt, SendOpt};
+use teleporter::{listen, scan, send};
+use teleporter::{ListenOpt, ScanOpt, SendOpt};
 
 /// Teleporter is a simple application for sending files from Point A to Point B
 #[derive(Clone, Debug, Parser, PartialEq, Eq)]
@@ -18,6 +18,8 @@ pub enum Cmd {
     Listen(ListenOpt),
     /// Start a teleporter in client (sending) mode
     Send(SendOpt),
+    /// Scan all network devices for any reachable Teleport listeners
+    Scan(ScanOpt),
 }
 
 fn main() {
@@ -28,6 +30,7 @@ fn main() {
     let out = match opt.cmd {
         Cmd::Listen(l) => listen::run(l),
         Cmd::Send(s) => send::run(s),
+        Cmd::Scan(s) => scan::run(s),
     };
 
     // Display any errors

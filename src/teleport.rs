@@ -3,6 +3,7 @@ use crate::errors::TeleportError;
 use crate::{PROTOCOL, VERSION};
 use byteorder::{LittleEndian, ReadBytesExt};
 use semver::Version;
+use std::fmt;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{Read, Seek};
@@ -24,6 +25,8 @@ pub enum TeleportAction {
     InitAck = 0x02,
     Ecdh = 0x04,
     EcdhAck = 0x08,
+    Ping = 0x10,
+    PingAck = 0x20,
     Data = 0x40,
     Encrypted = 0x80,
 }
@@ -155,6 +158,7 @@ pub enum TeleportFeatures {
     Overwrite = 0x04,
     Backup = 0x08,
     Rename = 0x10,
+    Ping = 0x20,
 }
 
 impl TeleportFeatures {
@@ -188,9 +192,44 @@ impl TeleportFeatures {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+pub struct TeleportVersion {
+    pub major: u16,
+    pub minor: u16,
+    pub patch: u16,
+}
+
+impl TeleportVersion {
+    pub fn serialize(&self) -> Vec<u8> {
+        let mut out = Vec::<u8>::new();
+        out.append(&mut self.major.to_le_bytes().to_vec());
+        out.append(&mut self.minor.to_le_bytes().to_vec());
+        out.append(&mut self.patch.to_le_bytes().to_vec());
+        out
+    }
+
+    pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
+        let mut buf = input;
+        self.major = buf.read_u16::<LittleEndian>()?;
+        self.minor = buf.read_u16::<LittleEndian>()?;
+        self.patch = buf.read_u16::<LittleEndian>()?;
+        Ok(())
+    }
+
+    pub fn is_compatible(&self, version: &Version) -> bool {
+        version.major == self.major as u64 && version.minor == self.minor as u64
+    }
+}
+
+impl fmt::Display for TeleportVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInit {
-    pub version: [u16; 3],
+    pub version: TeleportVersion,
     pub features: u32,
     pub chmod: u32,
     pub filesize: u64,
@@ -200,14 +239,14 @@ pub struct TeleportInit {
 
 impl TeleportInit {
     pub fn new(features: TeleportFeatures) -> TeleportInit {
-        let version = Version::parse(VERSION).expect("Fatal version error");
+        let v = Version::parse(VERSION).expect("Fatal version error");
 
         TeleportInit {
-            version: [
-                version.major as u16,
-                version.minor as u16,
-                version.patch as u16,
-            ],
+            version: TeleportVersion {
+                major: v.major as u16,
+                minor: v.minor as u16,
+                patch: v.patch as u16,
+            },
             features: features as u32,
             chmod: 0o644,
             filesize: 0,
@@ -220,9 +259,7 @@ impl TeleportInit {
         let mut out = Vec::<u8>::new();
 
         // Add version
-        for i in self.version {
-            out.append(&mut i.to_le_bytes().to_vec());
-        }
+        out.append(&mut self.version.serialize());
 
         // Add features
         out.append(&mut self.features.to_le_bytes().to_vec());
@@ -244,12 +281,10 @@ impl TeleportInit {
     }
 
     pub fn deserialize(&mut self, input: &[u8]) -> Result<(), TeleportError> {
-        let mut buf: &[u8] = input;
-
         // Extract version info
-        for i in &mut self.version {
-            *i = buf.read_u16::<LittleEndian>()?;
-        }
+        self.version.deserialize(input)?;
+
+        let mut buf: &[u8] = &input[6..];
 
         // Extract file command feature requests
         self.features = buf.read_u32::<LittleEndian>()?;
@@ -274,25 +309,27 @@ impl TeleportInit {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct TeleportInitAck {
     pub status: u8,
-    pub version: [u16; 3],
+    pub version: TeleportVersion,
     pub features: Option<u32>,
     pub delta: Option<TeleportDelta>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum TeleportStatus {
-    Proceed,
-    NoOverwrite,
-    NoSpace,
-    NoPermission,
-    WrongVersion,
-    RequiresEncryption,
-    EncryptionError,
-    BadFileName,
-    UnknownAction,
+    Proceed = 0x00,
+    NoOverwrite = 0x01,
+    NoSpace = 0x02,
+    NoPermission = 0x03,
+    WrongVersion = 0x04,
+    RequiresEncryption = 0x05,
+    EncryptionError = 0x06,
+    BadFileName = 0x07,
+    Pong = 0x08,
+    UnknownAction = 0xff,
 }
 
 impl TryFrom<u8> for TeleportStatus {
@@ -309,6 +346,8 @@ impl TryFrom<u8> for TeleportStatus {
                 Ok(TeleportStatus::RequiresEncryption)
             }
             x if x == TeleportStatus::EncryptionError as u8 => Ok(TeleportStatus::EncryptionError),
+            x if x == TeleportStatus::BadFileName as u8 => Ok(TeleportStatus::BadFileName),
+            x if x == TeleportStatus::Pong as u8 => Ok(TeleportStatus::Pong),
             x if x == TeleportStatus::UnknownAction as u8 => Ok(TeleportStatus::UnknownAction),
             _ => Err(TeleportError::InvalidStatusCode),
         }
@@ -317,15 +356,15 @@ impl TryFrom<u8> for TeleportStatus {
 
 impl TeleportInitAck {
     pub fn new(status: TeleportStatus) -> TeleportInitAck {
-        let version = Version::parse(VERSION).expect("Fatal version error");
+        let v = Version::parse(VERSION).expect("Fatal version error");
 
         TeleportInitAck {
             status: status as u8,
-            version: [
-                version.major as u16,
-                version.minor as u16,
-                version.patch as u16,
-            ],
+            version: TeleportVersion {
+                major: v.major as u16,
+                minor: v.minor as u16,
+                patch: v.patch as u16,
+            },
             features: None,
             delta: None,
         }
@@ -339,9 +378,7 @@ impl TeleportInitAck {
         out.append(&mut vec![status]);
 
         // Add version
-        for i in self.version {
-            out.append(&mut i.to_le_bytes().to_vec());
-        }
+        out.append(&mut self.version.serialize());
 
         // If no features, return early
         if status != TeleportStatus::Proceed as u8 || self.features.is_none() {
@@ -370,9 +407,9 @@ impl TeleportInitAck {
         self.status = buf.read_u8()?;
 
         // Extract version
-        for i in &mut self.version {
-            *i = buf.read_u16::<LittleEndian>()?;
-        }
+        self.version.deserialize(&input[1..])?;
+
+        let mut buf: &[u8] = &input[7..];
 
         // If no features, return early
         if self.status != TeleportStatus::Proceed as u8 {
@@ -694,7 +731,11 @@ mod tests {
     #[test]
     fn test_teleportinit_serialize() {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
-        test.version = [0, 5, 5];
+        test.version = TeleportVersion {
+            major: 0,
+            minor: 5,
+            patch: 5,
+        };
         test.filename = vec![b'f', b'i', b'l', b'e'];
         test.filesize = 12345;
         test.chmod = 0o755;
@@ -707,7 +748,11 @@ mod tests {
     #[test]
     fn test_teleportinit_deserialize() {
         let mut test = TeleportInit::new(TeleportFeatures::NewFile);
-        test.version = [0, 5, 5];
+        test.version = TeleportVersion {
+            major: 0,
+            minor: 5,
+            patch: 5,
+        };
         test.filename = vec![b'f', b'i', b'l', b'e'];
         test.filename_len = test.filename.len() as u16;
         test.filesize = 12345;
@@ -716,7 +761,11 @@ mod tests {
 
         let mut t = TeleportInit::new(TeleportFeatures::NewFile);
         t.deserialize(TESTINIT).expect("Test should never fail");
-        t.version = [0, 5, 5];
+        t.version = TeleportVersion {
+            major: 0,
+            minor: 5,
+            patch: 5,
+        };
 
         assert_eq!(test, t);
     }
@@ -778,7 +827,11 @@ mod tests {
         let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
-        test.version = [0, 6, 0];
+        test.version = TeleportVersion {
+            major: 0,
+            minor: 6,
+            patch: 0,
+        };
         let out = test.serialize().expect("Test should never fail");
 
         assert_eq!(out, TESTINITACK);
@@ -789,7 +842,11 @@ mod tests {
         let mut test = TeleportInitAck::new(TeleportStatus::Proceed);
         let feat = TeleportFeatures::NewFile as u32 | TeleportFeatures::Overwrite as u32;
         test.features = Some(feat);
-        test.version = [0, 6, 0];
+        test.version = TeleportVersion {
+            major: 0,
+            minor: 6,
+            patch: 0,
+        };
 
         let mut t = TeleportInitAck::new(TeleportStatus::Proceed);
         t.deserialize(TESTINITACK).expect("Test should never fail");
