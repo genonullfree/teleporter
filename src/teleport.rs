@@ -3,6 +3,7 @@ use crate::errors::TeleportError;
 use crate::{PROTOCOL, VERSION};
 use byteorder::{LittleEndian, ReadBytesExt};
 use semver::Version;
+use std::fmt;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{Read, Seek};
@@ -215,12 +216,14 @@ impl TeleportVersion {
         Ok(())
     }
 
-    pub fn to_string(&self) -> String {
-        format!("{}.{}.{}", self.major, self.minor, self.patch)
-    }
-
     pub fn is_compatible(&self, version: &Version) -> bool {
         version.major == self.major as u64 && version.minor == self.minor as u64
+    }
+}
+
+impl fmt::Display for TeleportVersion {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
     }
 }
 
